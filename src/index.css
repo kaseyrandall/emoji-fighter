@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply antialiased font-arcade;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@layer components {
+  .footer {
+    @apply fixed bottom-0 w-full py-2 px-4 text-center text-xs text-gray-400 bg-black/50 backdrop-blur-sm z-50;
+  }
+  .game-button {
+    @apply select-none touch-none;
+  }
+  .game-controls {
+    @apply fixed bottom-0 left-0 right-0 p-4 flex justify-between items-center;
+  }
+  .move-button {
+    @apply bg-gray-700/50 p-4 rounded-full text-lg font-bold active:bg-gray-600/50 transition-colors;
+  }
+  .attack-button {
+    @apply rounded-full w-16 h-16 flex items-center justify-center text-lg font-bold transition-colors;
+  }
+  .attack-button.punch {
+    @apply bg-red-500/50 active:bg-red-600/50;
+  }
+  .attack-button.kick {
+    @apply bg-blue-500/50 active:bg-blue-600/50;
+  }
+  .attack-button.special {
+    @apply bg-purple-500/50 active:bg-purple-600/50;
+  }
+}
