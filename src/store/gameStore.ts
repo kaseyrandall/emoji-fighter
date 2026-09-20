@@ -22,8 +22,8 @@ interface GameStore extends GameState {
 export const useGameStore = create<GameStore>((set) => ({
   selectedCharacter: null,
   opponent: null,
-  playerHealth: 120,
-  opponentHealth: 120,
+  playerHealth: 100,
+  opponentHealth: 100,
   gameStatus: 'ready',
   round: 1,
   playerPosition: 15,
@@ -224,8 +224,8 @@ export const useGameStore = create<GameStore>((set) => ({
 
   endRound: (winner: 'player' | 'opponent') => {
     const state = useGameStore.getState();
-    const baseHealth = state.selectedCharacter?.health || 120;
-    const opponentBaseHealth = state.opponent?.health || 120;
+    const baseHealth = state.selectedCharacter?.health || 100;
+    const opponentBaseHealth = state.opponent?.health || 100;
 
     // Update wins
     const playerWins = state.playerWins + (winner === 'player' ? 1 : 0);
@@ -272,8 +272,8 @@ export const useGameStore = create<GameStore>((set) => ({
 
   resetGame: () => {
     set({
-      playerHealth: 120,
-      opponentHealth: 120,
+      playerHealth: 100,
+      opponentHealth: 100,
       gameStatus: 'ready',
       round: 1,
       countdown: 3,
