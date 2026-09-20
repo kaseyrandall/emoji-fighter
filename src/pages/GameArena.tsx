@@ -1,11 +1,19 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ReactGA from 'react-ga4';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence, useAnimationControls } from 'framer-motion';
 import UIFx from 'uifx';
 import { useGameStore } from '../store/gameStore';
 import { Pause, Play, RotateCcw } from 'lucide-react';
 import { stages } from '../data/stages';
+
+interface FloatingHit {
+  id: number;
+  amount: number;
+  target: 'player' | 'opponent';
+  x: number;
+  special: boolean;
+}
 
 export default function GameArena() {
   const navigate = useNavigate();
@@ -17,11 +25,11 @@ export default function GameArena() {
 
   useEffect(() => {
     // Initialize sounds after component mounts
-    punchSound.current = new UIFx('./assets/punch.mp3', { volume: 0.5 });
-    kickSound.current = new UIFx('./assets/kick.mp3', { volume: 0.5 });
-    specialSound.current = new UIFx('./assets/special.mp3', { volume: 0.6 });
-    winSound.current = new UIFx('./assets/victory.mp3', { volume: 0.7 });
-    loseSound.current = new UIFx('./assets/defeat.mp3', { volume: 0.7 });
+    punchSound.current = new UIFx('./assets/punch.wav', { volume: 0.5 });
+    kickSound.current = new UIFx('./assets/kick.wav', { volume: 0.5 });
+    specialSound.current = new UIFx('./assets/special.wav', { volume: 0.6 });
+    winSound.current = new UIFx('./assets/victory.wav', { volume: 0.7 });
+    loseSound.current = new UIFx('./assets/defeat.wav', { volume: 0.7 });
   }, []);
   
   const {
@@ -45,10 +53,46 @@ export default function GameArena() {
     playerPosition,
     playerY,
     opponentPosition,
-    isOpponentAttacking
+    isOpponentAttacking,
+    hitEvent
   } = useGameStore();
 
   const stage = stages.find(s => s.id === currentStage);
+
+  // --- Hit VFX: screen shake, red flash, floating damage numbers ---
+  const arenaControls = useAnimationControls();
+  const [floatingHits, setFloatingHits] = useState<FloatingHit[]>([]);
+  const [flash, setFlash] = useState<'player' | 'opponent' | null>(null);
+
+  useEffect(() => {
+    if (!hitEvent) return;
+    const special = hitEvent.move === 'special';
+
+    // Screen shake, bigger on specials
+    const mag = special ? 14 : 7;
+    arenaControls.start({
+      x: [0, -mag, mag, -mag / 2, mag / 2, 0],
+      transition: { duration: special ? 0.4 : 0.25 }
+    });
+
+    // Red flash on the struck fighter
+    setFlash(hitEvent.target);
+    const flashTimer = setTimeout(() => setFlash(null), 150);
+
+    // Floating damage number above the struck fighter
+    const x = hitEvent.target === 'player' ? playerPosition : opponentPosition;
+    const fh: FloatingHit = { id: hitEvent.seq, amount: hitEvent.amount, target: hitEvent.target, x, special };
+    setFloatingHits(prev => [...prev, fh]);
+    const numTimer = setTimeout(() => {
+      setFloatingHits(prev => prev.filter(h => h.id !== fh.id));
+    }, 800);
+
+    return () => {
+      clearTimeout(flashTimer);
+      clearTimeout(numTimer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hitEvent?.seq]);
 
   const getPlayerAnimation = () => {
     if (!isAttacking) return {};
@@ -93,7 +137,7 @@ export default function GameArena() {
     }
 
     // Play background music
-    const bgm = new Audio('/assets/fight-bgm.mp3');
+    const bgm = new Audio('/assets/fight-bgm.wav');
     bgm.loop = true;
     bgm.volume = 0.3;
     bgm.play().catch(() => {});
@@ -131,12 +175,15 @@ export default function GameArena() {
       switch (e.key.toLowerCase()) {
         case 'j':
           performMove('punch');
+          playMoveSound('punch');
           break;
         case 'k':
           performMove('kick');
+          playMoveSound('kick');
           break;
         case 'l':
           performMove('special');
+          playMoveSound('special');
           break;
         case 'a':
           performMove('left');
@@ -264,13 +311,38 @@ export default function GameArena() {
         {/* Floor */}
         <div className={`absolute bottom-0 w-full h-48 ${stage?.floorColor}`} />
         
-        <div className="relative flex items-end justify-around w-full max-w-4xl mx-auto">
+        <motion.div
+          className="relative flex items-end justify-around w-full max-w-4xl mx-auto"
+          animate={arenaControls}
+        >
+          {/* Floating damage numbers */}
+          <AnimatePresence>
+            {floatingHits.map(h => (
+              <motion.div
+                key={h.id}
+                className={`absolute pointer-events-none font-arcade font-bold z-20 ${
+                  h.special ? 'text-yellow-300 text-4xl' : 'text-red-500 text-3xl'
+                } drop-shadow-[0_2px_6px_rgba(0,0,0,0.8)]`}
+                style={{ left: `${h.x}%`, bottom: '220px' }}
+                initial={{ opacity: 0, y: 0, scale: 0.6 }}
+                animate={{ opacity: 1, y: -70, scale: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.8, ease: 'easeOut' }}
+              >
+                -{h.amount}
+              </motion.div>
+            ))}
+          </AnimatePresence>
+
           <motion.div
-            className="text-[8rem] lg:text-[12rem] transform scale-x-[-1] drop-shadow-[0_0_15px_rgba(255,255,255,0.5)] absolute"
+            className="text-[8rem] lg:text-[12rem] transform scale-x-[-1] absolute"
             style={{
               left: `${playerPosition}%`,
               bottom: `${playerY}px`,
-              transition: 'left 0.2s ease-out, bottom 0.3s ease-out'
+              transition: 'left 0.2s ease-out, bottom 0.3s ease-out',
+              filter: flash === 'player'
+                ? 'brightness(1.9) drop-shadow(0 0 22px rgba(255,40,40,0.95))'
+                : 'drop-shadow(0 0 15px rgba(255,255,255,0.5))'
             }}
             animate={getPlayerAnimation()}
             transition={{
@@ -281,10 +353,13 @@ export default function GameArena() {
             {selectedCharacter.emoji}
           </motion.div>
           <motion.div
-            className="text-[8rem] lg:text-[12rem] drop-shadow-[0_0_15px_rgba(255,255,255,0.5)] absolute"
+            className="text-[8rem] lg:text-[12rem] absolute"
             style={{
               left: `${opponentPosition}%`,
-              transition: 'left 0.2s ease-out'
+              transition: 'left 0.2s ease-out',
+              filter: flash === 'opponent'
+                ? 'brightness(1.9) drop-shadow(0 0 22px rgba(255,40,40,0.95))'
+                : 'drop-shadow(0 0 15px rgba(255,255,255,0.5))'
             }}
             animate={getOpponentAnimation()}
             transition={{
@@ -294,7 +369,7 @@ export default function GameArena() {
           >
             {opponent.emoji}
           </motion.div>
-        </div>
+        </motion.div>
       </div>
 
       {/* Game Status Overlay */}

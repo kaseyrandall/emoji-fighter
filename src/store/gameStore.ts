@@ -3,6 +3,10 @@ import { GameState, Character, Move } from '../types/game';
 import { characters } from '../data/characters';
 import { stages } from '../data/stages';
 
+// Monotonic id so the UI re-triggers VFX even for identical damage values.
+let hitSeq = 0;
+const nextHit = () => ++hitSeq;
+
 interface GameStore extends GameState {
   selectCharacter: (character: Character) => void;
   selectOpponent: () => void;
@@ -39,6 +43,7 @@ export const useGameStore = create<GameStore>((set) => ({
   playerWins: 0,
   opponentWins: 0,
   isJumping: false,
+  hitEvent: null,
   setAttacking: (value) => set({ isAttacking: value }),
 
   selectCharacter: (character) => set({ selectedCharacter: character }),
@@ -105,14 +110,19 @@ export const useGameStore = create<GameStore>((set) => ({
 
     const damage = state.selectedCharacter?.moves[move] || 0;
     const newOpponentHealth = Math.max(0, state.opponentHealth - damage);
+    const hitEvent = { target: 'opponent' as const, amount: damage, move, seq: nextHit() };
+
+    // Knock the opponent back a touch on hit.
+    const knockback = move === 'special' ? 8 : 4;
+    const knockedPosition = Math.min(100, state.opponentPosition + knockback);
 
     if (newOpponentHealth <= 0) {
-      set({ opponentHealth: 0 });
+      set({ opponentHealth: 0, opponentPosition: knockedPosition, hitEvent });
       useGameStore.getState().endRound('player');
       return;
     }
-    
-    set({ opponentHealth: newOpponentHealth });
+
+    set({ opponentHealth: newOpponentHealth, opponentPosition: knockedPosition, hitEvent });
   },
 
   opponentAttack: () => {
@@ -131,12 +141,17 @@ export const useGameStore = create<GameStore>((set) => ({
 
     const damage = state.opponent?.moves[randomMove] || 0;
     const newPlayerHealth = Math.max(0, state.playerHealth - damage);
+    const hitEvent = { target: 'player' as const, amount: damage, move: randomMove, seq: nextHit() };
+
+    // Knock the player back a touch on hit.
+    const knockback = randomMove === 'special' ? 8 : 4;
+    const knockedPosition = Math.max(0, state.playerPosition - knockback);
 
     if (newPlayerHealth <= 0) {
-      set({ playerHealth: 0 });
+      set({ playerHealth: 0, playerPosition: knockedPosition, hitEvent });
       useGameStore.getState().endRound('opponent');
     } else {
-      set({ playerHealth: newPlayerHealth });
+      set({ playerHealth: newPlayerHealth, playerPosition: knockedPosition, hitEvent });
     }
   },
 

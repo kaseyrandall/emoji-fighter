@@ -24,7 +24,7 @@ export default function CharacterSelect() {
     }
     
     // Play selection sound
-    new Audio('/assets/select.mp3').play().catch(() => {});
+    new Audio('/assets/select.wav').play().catch(() => {});
     
     // Delay navigation to show selection effect
     setTimeout(() => {

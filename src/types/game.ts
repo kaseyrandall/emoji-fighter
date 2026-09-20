@@ -36,6 +36,14 @@ export interface GameState {
   playerWins: number;
   opponentWins: number;
   isJumping: boolean;
+  hitEvent: HitEvent | null;
+}
+
+export interface HitEvent {
+  target: 'player' | 'opponent';
+  amount: number;
+  move: Move | null;
+  seq: number;
 }
 
 export type Move = 'punch' | 'kick' | 'special' | 'left' | 'right' | 'jump';
