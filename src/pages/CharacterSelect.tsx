@@ -3,12 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import ReactGA from 'react-ga4';
 import { motion } from 'framer-motion';
 import { characters } from '../data/characters';
-import { useGameStore } from '../store/gameStore';
-import { Swords, Sparkles, ArrowLeft } from 'lucide-react';
+import { stages } from '../data/stages';
+import { useGameStore, GAUNTLET_SIZE, DIFFICULTY_LEVELS } from '../store/gameStore';
+import { Swords, Sparkles, ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Character } from '../types/game';
 
-// Signature colour per fighter — drives the tile glow, stat bars, name glow,
-// and the reactive background so each pick feels distinct.
+// Signature colour per fighter — drives glows, stat bars and the backdrop tint.
 const ACCENTS: Record<string, string> = {
   ninja: '#818cf8', robot: '#22d3ee', alien: '#a78bfa', dragon: '#10b981',
   poop: '#d97706', ghost: '#cbd5e1', zombie: '#84cc16', trex: '#22c55e',
@@ -16,6 +16,10 @@ const ACCENTS: Record<string, string> = {
   chicken: '#facc15', unicorn: '#e879f9', clown: '#ef4444',
 };
 const accentOf = (id: string) => ACCENTS[id] ?? '#f59e0b';
+
+const overallOf = (c: Character) =>
+  Math.round(((c.stats.power + c.stats.speed + c.stats.technique) / 3) * 10) / 10;
+const tierOf = (ovr: number) => (ovr >= 8.7 ? 'S' : ovr >= 8 ? 'A' : ovr >= 7.3 ? 'B' : 'C');
 
 // Measure an element and keep its size in state (updates on resize / rotate).
 function useElementSize<T extends HTMLElement>() {
@@ -33,28 +37,10 @@ function useElementSize<T extends HTMLElement>() {
   return [ref, size] as const;
 }
 
-// Pick the column count that makes the biggest square tiles fitting all N
-// items inside a w×h box — so the roster fills whatever space it's given.
-function packGrid(w: number, h: number, n: number, gap: number, maxTile: number) {
-  let best = { cols: 1, rows: n, size: 0 };
-  for (let cols = 1; cols <= n; cols++) {
-    const rows = Math.ceil(n / cols);
-    const tw = (w - (cols - 1) * gap) / cols;
-    const th = (h - (rows - 1) * gap) / rows;
-    const size = Math.min(tw, th);
-    if (size > best.size) best = { cols, rows, size };
-  }
-  return { ...best, size: Math.min(best.size, maxTile) };
-}
-
-const overallOf = (c: Character) =>
-  Math.round(((c.stats.power + c.stats.speed + c.stats.technique) / 3) * 10) / 10;
-const tierOf = (ovr: number) => (ovr >= 8.7 ? 'S' : ovr >= 8 ? 'A' : ovr >= 7.3 ? 'B' : 'C');
-
 const StatBar = ({ label, value, accent }: { label: string; value: number; accent: string }) => (
   <div className="flex items-center gap-1.5">
-    <span className="w-8 text-[10px] sm:text-xs text-gray-400 text-left shrink-0">{label}</span>
-    <div className="flex-1 h-2 sm:h-2.5 bg-gray-700/80 rounded-full overflow-hidden">
+    <span className="w-8 text-[10px] sm:text-xs text-gray-300 text-left shrink-0">{label}</span>
+    <div className="flex-1 h-2 sm:h-2.5 bg-gray-700/70 rounded-full overflow-hidden">
       <motion.div
         className="h-full rounded-full"
         style={{ background: `linear-gradient(90deg, ${accent}, ${accent}aa)` }}
@@ -70,6 +56,8 @@ const StatBar = ({ label, value, accent }: { label: string; value: number; accen
 export default function CharacterSelect() {
   const navigate = useNavigate();
   const startGauntlet = useGameStore((s) => s.startGauntlet);
+  const difficulty = useGameStore((s) => s.difficulty);
+  const setDifficulty = useGameStore((s) => s.setDifficulty);
   const [selectedId, setSelectedId] = React.useState<string>(characters[0].id);
 
   const selected = characters.find((c) => c.id === selectedId) || characters[0];
@@ -77,172 +65,179 @@ export default function CharacterSelect() {
   const overall = overallOf(selected);
   const tier = tierOf(overall);
 
-  // Adaptive roster: fit every fighter into whatever space the grid gets.
-  const [gridRef, gridSize] = useElementSize<HTMLDivElement>();
-  const GAP = 6;
-  const { cols, size: tile } = packGrid(gridSize.w, gridSize.h, characters.length, GAP, 150);
-  const emojiPx = Math.round(tile * 0.42);
-  const namePx = Math.max(8, Math.min(Math.round(tile * 0.15), 15));
+  // Random stage as an atmospheric, blurred backdrop.
+  const backdrop = React.useMemo(() => stages[Math.floor(Math.random() * stages.length)].background, []);
+
+  // Two horizontally-scrolling rows; tile size follows the row height.
+  const [rosterRef, rosterSize] = useElementSize<HTMLDivElement>();
+  const GAP = 8;
+  const rowH = Math.max(0, (rosterSize.h - GAP) / 2);
+  const tile = Math.min(rowH, 150);
+  const half = Math.ceil(characters.length / 2);
+  const rows = [characters.slice(0, half), characters.slice(half)];
 
   const handleSelect = (id: string) => {
     setSelectedId(id);
     new Audio('/assets/select.wav').play().catch(() => {});
   };
 
+  const stepDifficulty = (dir: 1 | -1) => {
+    const i = DIFFICULTY_LEVELS.indexOf(difficulty);
+    const next = DIFFICULTY_LEVELS[(i + dir + DIFFICULTY_LEVELS.length) % DIFFICULTY_LEVELS.length];
+    setDifficulty(next);
+  };
+
   const handleFight = () => {
-    ReactGA.event({ category: 'Game', action: 'Fight Started', label: selected.name });
+    ReactGA.event({ category: 'Game', action: 'Fight Started', label: `${selected.name} · ${difficulty}` });
     startGauntlet(selected);
     navigate('/arena');
   };
 
+  const Tile = ({ character }: { character: Character }) => {
+    const isSelected = character.id === selectedId;
+    const a = accentOf(character.id);
+    return (
+      <motion.button
+        onClick={() => handleSelect(character.id)}
+        whileTap={{ scale: 0.94 }}
+        className="relative shrink-0 aspect-square h-full rounded-xl border-2 flex flex-col items-center justify-center
+                 overflow-hidden bg-gray-900/50 backdrop-blur-sm hover:bg-gray-800/60 transition-colors"
+        style={{
+          borderColor: isSelected ? a : 'rgba(148,163,184,0.25)',
+          boxShadow: isSelected ? `0 0 18px ${a}66, inset 0 0 16px ${a}22` : undefined,
+        }}
+      >
+        <span
+          className="leading-none"
+          style={{ fontSize: Math.round(tile * 0.4), filter: isSelected ? `drop-shadow(0 0 8px ${a}aa)` : undefined }}
+        >
+          {character.emoji}
+        </span>
+        <span
+          className="w-full px-0.5 font-semibold leading-[1.05] text-center line-clamp-2"
+          style={{ marginTop: tile * 0.04, fontSize: Math.max(8, Math.min(Math.round(tile * 0.13), 13)), color: isSelected ? '#fff' : '#cbd5e1' }}
+        >
+          {character.name}
+        </span>
+      </motion.button>
+    );
+  };
+
   return (
-    <div className="relative h-[100dvh] flex flex-col overflow-hidden px-2 py-2 gap-1.5">
-      {/* Reactive background glow, tinted by the selected fighter */}
+    <div className="relative h-[100dvh] flex flex-col overflow-hidden">
+      {/* Atmospheric stage backdrop */}
       <div
-        className="pointer-events-none absolute inset-0 -z-10 transition-all duration-500"
-        style={{ background: `radial-gradient(60% 60% at 80% 50%, ${accent}22, transparent 70%)` }}
+        className="absolute inset-0 -z-20 bg-cover bg-center scale-105"
+        style={{ backgroundImage: `url(${backdrop})`, filter: 'blur(3px) brightness(0.35)' }}
+      />
+      <div
+        className="absolute inset-0 -z-10 transition-all duration-500"
+        style={{ background: `radial-gradient(55% 75% at 24% 48%, ${accent}2e, transparent 70%)` }}
       />
 
       {/* Header */}
-      <div className="flex items-center justify-between shrink-0">
+      <div className="flex items-start justify-between px-3 pt-2 shrink-0">
         <button
           onClick={() => navigate('/')}
-          className="px-2 py-1.5 text-gray-300 hover:text-white transition-colors flex items-center gap-1
-                   bg-gray-800/60 rounded-lg backdrop-blur-sm text-xs"
+          className="px-2.5 py-1.5 text-gray-200 hover:text-white transition-colors flex items-center gap-1
+                   bg-black/40 rounded-lg backdrop-blur-sm text-xs font-semibold"
         >
           <ArrowLeft size={15} />
-          <span>Back</span>
+          <span>BACK</span>
         </button>
-        <h2 className="text-sm sm:text-xl lg:text-2xl font-bold text-center bg-gradient-to-b from-white to-gray-400 bg-clip-text text-transparent">
-          Choose Your Fighter
-        </h2>
-        <div className="w-12" />
-      </div>
 
-      {/* Body: roster grid + detail panel */}
-      <div className="flex-1 flex gap-2 min-h-0">
-        {/* Roster — adapts to the available box: columns and tile size are
-            chosen to pack every fighter in with no scroll or overlap, and the
-            emoji/name scale with the tiles. */}
-        <div ref={gridRef} className="flex-1 min-h-0">
-          {tile > 0 && (
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: `repeat(${cols}, ${tile}px)`,
-                gap: `${GAP}px`,
-                justifyContent: 'center',
-                alignContent: 'center',
-                height: '100%',
-              }}
-            >
-              {characters.map((character) => {
-                const isSelected = character.id === selectedId;
-                const a = accentOf(character.id);
-                return (
-                  <motion.button
-                    key={character.id}
-                    onClick={() => handleSelect(character.id)}
-                    whileTap={{ scale: 0.94 }}
-                    className="relative rounded-xl border-2 flex flex-col items-center justify-center overflow-hidden
-                             bg-gray-800/70 hover:bg-gray-700/70 transition-colors"
-                    style={{
-                      width: tile,
-                      height: tile,
-                      borderColor: isSelected ? a : 'rgba(75,85,99,0.55)',
-                      boxShadow: isSelected ? `0 0 18px ${a}66, inset 0 0 16px ${a}22` : undefined,
-                    }}
-                  >
-                    <span
-                      className="leading-none"
-                      style={{ fontSize: emojiPx, filter: isSelected ? `drop-shadow(0 0 8px ${a}aa)` : undefined }}
-                    >
-                      {character.emoji}
-                    </span>
-                    <span
-                      className="w-full px-0.5 font-semibold leading-[1.05] text-center line-clamp-2"
-                      style={{ marginTop: tile * 0.04, fontSize: namePx, color: isSelected ? '#fff' : '#cbd5e1' }}
-                    >
-                      {character.name}
-                    </span>
-                  </motion.button>
-                );
-              })}
-            </div>
-          )}
+        <div className="flex-1 min-w-0 text-center leading-none px-2">
+          <h2 className="truncate text-sm sm:text-xl lg:text-2xl font-bold tracking-wide bg-gradient-to-b from-white to-gray-400 bg-clip-text text-transparent">
+            Choose Your Fighter
+          </h2>
+          <div className="truncate text-[8px] sm:text-[10px] text-gray-400 tracking-[0.18em] uppercase mt-1">
+            Gauntlet · {GAUNTLET_SIZE} fights · rising difficulty
+          </div>
         </div>
 
-        {/* Detail panel — FIGHT stays pinned at the bottom; the description
-            flexes and clips so the button is never pushed off-screen. */}
+        <div className="flex flex-col items-end">
+          <span className="text-[8px] sm:text-[10px] text-gray-400 tracking-[0.2em] uppercase mb-0.5">Difficulty</span>
+          <div className="flex items-center gap-1 bg-black/40 rounded-lg backdrop-blur-sm px-1 py-0.5">
+            <button onClick={() => stepDifficulty(-1)} className="p-1 text-gray-300 hover:text-white">
+              <ChevronLeft size={14} />
+            </button>
+            <span className="w-14 text-center text-xs sm:text-sm font-bold" style={{ color: accent }}>{difficulty}</span>
+            <button onClick={() => stepDifficulty(1)} className="p-1 text-gray-300 hover:text-white">
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Body: hero splash + two roster rows */}
+      <div className="flex-1 flex gap-2 sm:gap-3 min-h-0 px-3 pb-2 pt-1">
+        {/* Hero */}
         <motion.div
           key={selected.id}
-          initial={{ opacity: 0, x: 10 }}
+          initial={{ opacity: 0, x: -12 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.2 }}
-          className="relative w-[38%] max-w-[17rem] lg:w-72 shrink-0 flex flex-col rounded-xl p-2 lg:p-3 border overflow-hidden bg-gray-900/75"
-          style={{ borderColor: `${accent}88`, boxShadow: `0 0 26px ${accent}22 inset` }}
+          className="w-[32%] max-w-[16rem] shrink-0 flex flex-col min-h-0"
         >
-          {/* faded emoji watermark */}
-          <span
-            className="pointer-events-none absolute -right-4 -bottom-6 text-[8rem] lg:text-[12rem] leading-none opacity-[0.06] select-none"
-            aria-hidden
-          >
-            {selected.emoji}
-          </span>
-
-          {/* Identity */}
-          <div className="relative flex items-center gap-2 shrink-0">
-            <span className="text-4xl sm:text-5xl lg:text-6xl leading-none" style={{ filter: `drop-shadow(0 0 10px ${accent}88)` }}>
+          <div className="flex-1 min-h-0 flex items-center justify-center overflow-hidden">
+            <motion.span
+              className="leading-none text-5xl sm:text-7xl lg:text-8xl"
+              style={{ filter: `drop-shadow(0 6px 18px ${accent}aa)` }}
+              animate={{ y: [0, -6, 0] }}
+              transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+            >
               {selected.emoji}
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-start gap-1">
-                <div
-                  className="font-bold text-sm sm:text-lg lg:text-xl leading-[1.05] flex-1 break-words line-clamp-2"
-                  style={{ textShadow: `0 0 12px ${accent}66` }}
-                >
-                  {selected.name}
-                </div>
-                <div
-                  className="shrink-0 w-5 h-5 lg:w-7 lg:h-7 rounded-md flex items-center justify-center font-bold text-xs lg:text-base"
-                  style={{ background: `${accent}22`, color: accent, border: `1px solid ${accent}88` }}
-                  title={`Overall ${overall}`}
-                >
-                  {tier}
-                </div>
-              </div>
-              <div className="flex items-center gap-1 text-[10px] sm:text-xs mt-0.5" style={{ color: accent }}>
-                <Sparkles size={11} className="shrink-0" />
-                <span className="truncate">{selected.specialName}</span>
-              </div>
+            </motion.span>
+          </div>
+
+          <div className="shrink-0">
+            <div className="flex items-start gap-1.5">
+              <h3 className="flex-1 min-w-0 font-bold text-lg sm:text-xl leading-[1.05] break-words line-clamp-2" style={{ textShadow: `0 0 14px ${accent}88` }}>
+                {selected.name}
+              </h3>
+              <span
+                className="shrink-0 w-5 h-5 sm:w-6 sm:h-6 rounded-md flex items-center justify-center font-bold text-[11px] sm:text-sm"
+                style={{ background: `${accent}22`, color: accent, border: `1px solid ${accent}88` }}
+                title={`Overall ${overall}`}
+              >
+                {tier}
+              </span>
+            </div>
+            <div className="flex items-center gap-1 text-[10px] sm:text-xs mt-0.5" style={{ color: accent }}>
+              <Sparkles size={11} className="shrink-0" />
+              <span className="truncate">{selected.specialName}</span>
+            </div>
+
+            <div className="mt-2 space-y-1.5">
+              <StatBar label="POW" value={selected.stats.power} accent={accent} />
+              <StatBar label="SPD" value={selected.stats.speed} accent={accent} />
+              <StatBar label="TEC" value={selected.stats.technique} accent={accent} />
             </div>
           </div>
 
-          {/* Stats */}
-          <div className="relative mt-2 space-y-1.5 shrink-0">
-            <StatBar label="POW" value={selected.stats.power} accent={accent} />
-            <StatBar label="SPD" value={selected.stats.speed} accent={accent} />
-            <StatBar label="TEC" value={selected.stats.technique} accent={accent} />
-          </div>
-
-          {/* Description — flexible + clipped so it can't push FIGHT away */}
-          <p className="relative flex-1 min-h-0 overflow-hidden mt-2 text-[11px] lg:text-sm text-gray-400 leading-snug">
-            {selected.description}
-          </p>
-
-          {/* FIGHT — always visible */}
           <motion.button
             onClick={handleFight}
             whileTap={{ scale: 0.96 }}
-            animate={{ boxShadow: ['0 0 0px rgba(239,68,68,0)', '0 0 20px rgba(239,68,68,0.5)', '0 0 0px rgba(239,68,68,0)'] }}
+            animate={{ boxShadow: ['0 0 0px rgba(239,68,68,0)', '0 0 22px rgba(239,68,68,0.55)', '0 0 0px rgba(239,68,68,0)'] }}
             transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
-            className="relative shrink-0 mt-2 w-full py-2.5 lg:py-3 bg-gradient-to-r from-red-600 to-orange-500 rounded-lg
-                     font-bold text-sm lg:text-lg flex items-center justify-center gap-2"
+            className="shrink-0 mt-2 w-full py-2.5 sm:py-3 bg-gradient-to-r from-red-600 to-orange-500 rounded-lg
+                     font-bold text-sm sm:text-lg flex items-center justify-center gap-2"
           >
             <Swords size={18} />
             FIGHT
           </motion.button>
         </motion.div>
+
+        {/* Two scrolling roster rows */}
+        <div ref={rosterRef} className="flex-1 min-h-0 flex flex-col" style={{ gap: GAP }}>
+          {rows.map((row, i) => (
+            <div key={i} className="flex-1 min-h-0 flex items-center overflow-x-auto overflow-y-hidden no-scrollbar" style={{ gap: GAP }}>
+              {row.map((character) => (
+                <Tile key={character.id} character={character} />
+              ))}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
