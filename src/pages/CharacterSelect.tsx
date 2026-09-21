@@ -23,7 +23,7 @@ const tierOf = (ovr: number) => (ovr >= 8.7 ? 'S' : ovr >= 8 ? 'A' : ovr >= 7.3 
 
 const StatBar = ({ label, value, accent }: { label: string; value: number; accent: string }) => (
   <div className="flex items-center gap-2">
-    <span className="w-[70px] sm:w-24 text-[11px] sm:text-xs text-gray-300 text-left shrink-0">{label}</span>
+    <span className="w-9 sm:w-12 text-[11px] sm:text-xs text-gray-400 text-left shrink-0 whitespace-nowrap">{label}</span>
     <div className="flex-1 h-2.5 sm:h-3 bg-gray-700/80 rounded-full overflow-hidden">
       <motion.div
         className="h-full rounded-full"
@@ -170,9 +170,9 @@ export default function CharacterSelect() {
           </p>
 
           <div className="relative mt-3 lg:mt-4 space-y-2 lg:space-y-2.5">
-            <StatBar label="Power" value={selected.stats.power} accent={accent} />
-            <StatBar label="Speed" value={selected.stats.speed} accent={accent} />
-            <StatBar label="Technique" value={selected.stats.technique} accent={accent} />
+            <StatBar label="POW" value={selected.stats.power} accent={accent} />
+            <StatBar label="SPD" value={selected.stats.speed} accent={accent} />
+            <StatBar label="TEC" value={selected.stats.technique} accent={accent} />
           </div>
 
           <div className="relative mt-auto pt-2">
