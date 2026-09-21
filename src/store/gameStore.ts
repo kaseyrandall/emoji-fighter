@@ -36,6 +36,12 @@ let physicsLoop: ReturnType<typeof setInterval> | undefined;
 const PLAYER_ATTACK_COOLDOWN = 340;
 let playerLastAttackAt = 0;
 
+// Reach, in position units (fighters are ~12 units wide). Punches/kicks only
+// connect at near-contact; the special reaches a little further. The AI uses
+// HIT_RANGE to decide it's close enough to start throwing attacks.
+const HIT_RANGE = 15;
+const SPECIAL_RANGE = 19;
+
 // Super meter: landing punches/kicks charges it; the special can only fire when
 // it's full, then it's spent. A full-meter special hits harder than a raw one.
 const SPECIAL_METER_MAX = 100;
@@ -260,7 +266,7 @@ export const useGameStore = create<GameStore>((set) => ({
     // Check if characters are close enough for hit detection
 
     const distance = Math.abs(state.playerPosition - state.opponentPosition);
-    if (distance > 25) return; // No damage if too far apart
+    if (distance > HIT_RANGE) return; // No damage if too far apart
 
     const damage = state.selectedCharacter?.moves[move] || 0;
     const newOpponentHealth = Math.max(0, state.opponentHealth - damage);
@@ -296,7 +302,7 @@ export const useGameStore = create<GameStore>((set) => ({
     setTimeout(() => set({ isAttacking: false, currentMove: null }), 600);
 
     const distance = Math.abs(state.playerPosition - state.opponentPosition);
-    if (distance > 25) return;
+    if (distance > SPECIAL_RANGE) return;
 
     const base = state.selectedCharacter?.moves.special || 0;
     const damage = Math.round(base * SPECIAL_SUPER_MULT);
@@ -325,7 +331,7 @@ export const useGameStore = create<GameStore>((set) => ({
 
     // Check if characters are close enough for hit detection
     const distance = Math.abs(state.playerPosition - state.opponentPosition);
-    if (distance > 25) return; // No damage if too far apart
+    if (distance > HIT_RANGE) return; // No damage if too far apart
 
     const { damageMult } = difficultyForStage(state.gauntletStage + DIFF_OFFSET[state.difficulty]);
     const baseDamage = state.opponent?.moves[randomMove] || 0;
@@ -364,7 +370,7 @@ export const useGameStore = create<GameStore>((set) => ({
       const distance = Math.abs(state.playerPosition - state.opponentPosition);
 
       // Move towards player if too far
-      if (distance > 25) {
+      if (distance > HIT_RANGE) {
         aiEnteredRangeAt = 0; // out of range — reset the reaction timer
         if (state.playerPosition < state.opponentPosition) {
           set(state => ({
