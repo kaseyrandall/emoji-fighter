@@ -60,7 +60,8 @@ export default function GameArena() {
     hitEvent,
     gauntletStage,
     gauntletOpponents,
-    advanceGauntlet
+    advanceGauntlet,
+    playerFacing
   } = useGameStore();
 
   const stage = stages.find(s => s.id === currentStage);
@@ -108,29 +109,35 @@ export default function GameArena() {
   }, [hitEvent?.seq]);
 
   const getPlayerAnimation = () => {
-    if (!isAttacking) return {};
-    
+    // Face the last-moved direction: default facing "right" is the flipped emoji.
+    const facX = playerFacing === 'right' ? -1 : 1;
+
+    if (!isAttacking) return { scaleX: facX };
+
     const duration = 0.4;
-    
+
     switch (currentMove) {
       case 'punch':
         return {
+          scaleX: facX,
           rotate: [0, -15, 0],
           transition: { duration }
         };
       case 'kick':
         return {
+          scaleX: facX,
           rotate: [0, 45, 0],
           transition: { duration }
         };
       case 'special':
         return {
-          scale: [1, 1.2, 1],
+          scaleX: facX,
+          scaleY: [1, 1.2, 1],
           rotate: [0, 45, 0],
           transition: { duration: 0.6 }
         };
       default:
-        return {};
+        return { scaleX: facX };
     }
   };
 
@@ -361,7 +368,7 @@ export default function GameArena() {
           </AnimatePresence>
 
           <motion.div
-            className="text-[8rem] lg:text-[12rem] transform scale-x-[-1] absolute"
+            className="text-[8rem] lg:text-[12rem] absolute"
             style={{
               left: `${playerPosition}%`,
               bottom: `${playerY}px`,
@@ -372,7 +379,7 @@ export default function GameArena() {
             }}
             animate={getPlayerAnimation()}
             transition={{
-              duration: 0.6,
+              duration: 0.25,
               ease: currentMove === 'special' ? "backOut" : "easeInOut"
             }}
           >

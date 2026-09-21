@@ -10,10 +10,10 @@ const nextHit = () => ++hitSeq;
 // How many opponents make up the gauntlet ladder (or all of them, if fewer).
 export const GAUNTLET_SIZE = Math.min(6, characters.length - 1);
 
-// Fighters are positioned by their left edge as a % of the arena. Keep them
-// inside these bounds so a fighter can never run off either edge of the screen.
-const POS_MIN = 4;
-const POS_MAX = 78;
+// Fighters are positioned by their left edge as a % of the arena. Bounds let a
+// fighter hang roughly half off either edge, but never disappear entirely.
+const POS_MIN = -10;
+const POS_MAX = 92;
 
 // AI timing state for the current round (reset when a round's AI loop starts).
 let aiLastAttackAt = 0;
@@ -71,6 +71,7 @@ const freshBout = () => ({
   isOpponentAttacking: false,
   currentMove: null,
   hitEvent: null,
+  playerFacing: 'right' as const,
 });
 
 interface GameStore extends GameState {
@@ -117,6 +118,7 @@ export const useGameStore = create<GameStore>((set) => ({
   opponentWins: 0,
   isJumping: false,
   hitEvent: null,
+  playerFacing: 'right',
   setAttacking: (value) => set({ isAttacking: value }),
 
   selectCharacter: (character) => set({ selectedCharacter: character }),
@@ -175,12 +177,14 @@ export const useGameStore = create<GameStore>((set) => ({
     if (move === 'left') {
       set(state => ({
         playerPosition: Math.max(POS_MIN, state.playerPosition - 12),
+        playerFacing: 'left',
       }));
       return;
     }
     if (move === 'right') {
       set(state => ({
         playerPosition: Math.min(POS_MAX, state.playerPosition + 12),
+        playerFacing: 'right',
       }));
       return;
     }
@@ -190,7 +194,7 @@ export const useGameStore = create<GameStore>((set) => ({
       // Smooth jump animation
       let jumpHeight = 0;
       const jumpUp = setInterval(() => {
-        if (jumpHeight >= 150) {
+        if (jumpHeight >= 230) {
           clearInterval(jumpUp);
           const fallDown = setInterval(() => {
             if (jumpHeight <= 0) {
@@ -394,7 +398,8 @@ export const useGameStore = create<GameStore>((set) => ({
         isJumping: false,
         isAttacking: false,
         isOpponentAttacking: false,
-        currentMove: null
+        currentMove: null,
+        playerFacing: 'right'
       });
     } else {
       // Reset for next round
@@ -414,7 +419,8 @@ export const useGameStore = create<GameStore>((set) => ({
         isJumping: false,
         isAttacking: false,
         isOpponentAttacking: false,
-        currentMove: null
+        currentMove: null,
+        playerFacing: 'right'
       });
       useGameStore.getState().startCountdown();
     }
@@ -441,7 +447,8 @@ export const useGameStore = create<GameStore>((set) => ({
       isJumping: false,
       isAttacking: false,
       isOpponentAttacking: false,
-      currentMove: null
+      currentMove: null,
+      playerFacing: 'right'
     });
   },
 

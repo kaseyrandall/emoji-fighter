@@ -40,6 +40,8 @@ export interface GameState {
   opponentWins: number;
   isJumping: boolean;
   hitEvent: HitEvent | null;
+  // Which way the player emoji faces — follows the last horizontal input.
+  playerFacing: 'left' | 'right';
 }
 
 export interface HitEvent {
