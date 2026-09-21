@@ -604,18 +604,20 @@ export default function GameArena() {
           {/* Movement joystick */}
           <Joystick onMoveDir={setMoveDir} onJump={() => performMove('jump')} size={116} />
 
-          {/* Attack cluster — punch/kick as the primary pair (thumb-height),
-              special raised and prominent between them. */}
-          <div className="relative w-[9.5rem] h-[7rem] shrink-0 select-none">
-            {/* Special (occasional, glows purple once the super meter is full) */}
+          {/* Attack cluster — special as a clearly-visible apex above the
+              punch/kick primary pair (a triangle, no button hidden behind
+              another). */}
+          <div className="relative w-[10rem] h-[8.5rem] shrink-0 select-none">
+            {/* Special apex — always visible; the ring fills as the super meter
+                charges and the whole button glows once it's ready. */}
             <motion.button
               onClick={useSpecial}
-              className="game-button absolute top-0 left-1/2 -translate-x-1/2 w-[3.75rem] h-[3.75rem] rounded-full flex items-center justify-center text-2xl overflow-hidden active:brightness-110"
+              className="game-button absolute top-0 left-1/2 -translate-x-1/2 w-16 h-16 rounded-full flex items-center justify-center text-2xl overflow-hidden focus:outline-none active:brightness-110"
               style={{
                 background: 'radial-gradient(circle at 50% 35%, #a855f7, #6b21a8)',
-                opacity: specialReady ? 1 : 0.55,
-                border: '2px solid rgba(216,180,254,0.6)',
-                boxShadow: specialReady ? '0 0 20px rgba(216,180,254,0.9)' : undefined,
+                opacity: specialReady ? 1 : 0.7,
+                border: `2px solid ${specialReady ? '#e9d5ff' : 'rgba(216,180,254,0.55)'}`,
+                boxShadow: specialReady ? '0 0 22px rgba(216,180,254,0.95)' : '0 0 10px rgba(168,85,247,0.5)',
               }}
               animate={specialReady ? { scale: [1, 1.09, 1] } : { scale: 1 }}
               transition={specialReady ? { duration: 0.9, repeat: Infinity } : { duration: 0.2 }}
@@ -623,22 +625,22 @@ export default function GameArena() {
             >
               {/* super meter fill (charged by landing attacks) */}
               <span
-                className="absolute inset-x-0 bottom-0 bg-purple-300/70 pointer-events-none transition-[height] duration-200"
+                className="absolute inset-x-0 bottom-0 bg-purple-200/70 pointer-events-none transition-[height] duration-200"
                 style={{ height: `${specialMeter}%` }}
               />
-              <span className="relative">✨</span>
+              <span className="relative drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]">✨</span>
             </motion.button>
 
             {/* Punch (primary) */}
             <button
               onClick={() => { performMove('punch'); playMoveSound('punch'); }}
-              className="game-button absolute bottom-0 left-0 w-[4.25rem] h-[4.25rem] rounded-full flex items-center justify-center text-3xl bg-red-500/45 border-2 border-red-400/40 active:bg-red-600/60"
+              className="game-button absolute bottom-0 left-0.5 w-[4.5rem] h-[4.5rem] rounded-full flex items-center justify-center text-3xl bg-red-500/55 border-2 border-red-300/70 focus:outline-none active:bg-red-600/70"
               aria-label="Punch"
             >👊</button>
             {/* Kick (primary) */}
             <button
               onClick={() => { performMove('kick'); playMoveSound('kick'); }}
-              className="game-button absolute bottom-0 right-0 w-[4.25rem] h-[4.25rem] rounded-full flex items-center justify-center text-3xl bg-blue-500/45 border-2 border-blue-400/40 active:bg-blue-600/60"
+              className="game-button absolute bottom-0 right-0.5 w-[4.5rem] h-[4.5rem] rounded-full flex items-center justify-center text-3xl bg-blue-500/55 border-2 border-blue-300/70 focus:outline-none active:bg-blue-600/70"
               aria-label="Kick"
             >🦶</button>
           </div>
