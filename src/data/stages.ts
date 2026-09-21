@@ -1,4 +1,5 @@
 // Stage backgrounds live in the public/ folder and are referenced by URL.
+const candyKingdom = '/assets/candy-kingdom.png';
 const nightMarket = '/assets/night-market.png';
 const retroArcade = '/assets/retro-arcade.png';
 const rooftopParty = '/assets/rooftop-party.png';
@@ -9,6 +10,14 @@ const westernTown = '/assets/western-town.png';
 import { Stage } from '../types/game';
 
 export const stages: Stage[] = [
+  {
+    id: 'candy-kingdom',
+    name: 'Candy Kingdom',
+    background: candyKingdom,
+    description: 'A sugar-spun realm of gumdrop hills and lollipop groves',
+    floorColor: '',
+    ambientLight: 'bg-pink-500/20'
+  },
   {
     id: 'night-market',
     name: 'Night Market',
