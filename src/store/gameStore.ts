@@ -26,6 +26,11 @@ const PLAYER_FRICTION = 0.8; // velocity retained per tick when no input
 let aiLastAttackAt = 0;
 let aiEnteredRangeAt = 0;
 
+// Single-instance loop handles so a new round never leaves an old loop running
+// (leaked loops would fight over movement and appear to "break" the controls).
+let aiLoop: ReturnType<typeof setInterval> | undefined;
+let physicsLoop: ReturnType<typeof setInterval> | undefined;
+
 // Recovery between the player's own attacks, so mashing can't stack hits and
 // combat has a rhythm instead of a one-sided slam.
 const PLAYER_ATTACK_COOLDOWN = 340;
@@ -341,7 +346,8 @@ export const useGameStore = create<GameStore>((set) => ({
   },
 
   opponentAI: () => {
-    let aiInterval: ReturnType<typeof setInterval>;
+    // Never run two AI loops at once.
+    if (aiLoop) clearInterval(aiLoop);
 
     // Reset per-round attack timing so each bout starts with a fair reaction window.
     aiLastAttackAt = 0;
@@ -350,7 +356,7 @@ export const useGameStore = create<GameStore>((set) => ({
     const runAI = () => {
       const state = useGameStore.getState();
       if (state.gameStatus !== 'playing') {
-        clearInterval(aiInterval);
+        if (aiLoop) { clearInterval(aiLoop); aiLoop = undefined; }
         return;
       }
 
@@ -386,17 +392,18 @@ export const useGameStore = create<GameStore>((set) => ({
     };
 
     // Run AI loop
-    aiInterval = setInterval(runAI, 50);
-    return () => clearInterval(aiInterval);
+    aiLoop = setInterval(runAI, 50);
   },
 
   // Integrate the player's horizontal velocity each tick: ease toward the input
   // direction, coast with friction when released, and stop dead at the walls.
   playerPhysics: () => {
-    const loop = setInterval(() => {
+    // Never run two physics loops at once.
+    if (physicsLoop) clearInterval(physicsLoop);
+    physicsLoop = setInterval(() => {
       const s = useGameStore.getState();
       if (s.gameStatus !== 'playing') {
-        clearInterval(loop);
+        if (physicsLoop) { clearInterval(physicsLoop); physicsLoop = undefined; }
         return;
       }
 
