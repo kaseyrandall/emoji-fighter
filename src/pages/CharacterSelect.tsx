@@ -17,6 +17,36 @@ const ACCENTS: Record<string, string> = {
 };
 const accentOf = (id: string) => ACCENTS[id] ?? '#f59e0b';
 
+// Measure an element and keep its size in state (updates on resize / rotate).
+function useElementSize<T extends HTMLElement>() {
+  const ref = React.useRef<T>(null);
+  const [size, setSize] = React.useState({ w: 0, h: 0 });
+  React.useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => setSize({ w: el.clientWidth, h: el.clientHeight });
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, size] as const;
+}
+
+// Pick the column count that makes the biggest square tiles fitting all N
+// items inside a w×h box — so the roster fills whatever space it's given.
+function packGrid(w: number, h: number, n: number, gap: number, maxTile: number) {
+  let best = { cols: 1, rows: n, size: 0 };
+  for (let cols = 1; cols <= n; cols++) {
+    const rows = Math.ceil(n / cols);
+    const tw = (w - (cols - 1) * gap) / cols;
+    const th = (h - (rows - 1) * gap) / rows;
+    const size = Math.min(tw, th);
+    if (size > best.size) best = { cols, rows, size };
+  }
+  return { ...best, size: Math.min(best.size, maxTile) };
+}
+
 const overallOf = (c: Character) =>
   Math.round(((c.stats.power + c.stats.speed + c.stats.technique) / 3) * 10) / 10;
 const tierOf = (ovr: number) => (ovr >= 8.7 ? 'S' : ovr >= 8 ? 'A' : ovr >= 7.3 ? 'B' : 'C');
@@ -46,6 +76,13 @@ export default function CharacterSelect() {
   const accent = accentOf(selected.id);
   const overall = overallOf(selected);
   const tier = tierOf(overall);
+
+  // Adaptive roster: fit every fighter into whatever space the grid gets.
+  const [gridRef, gridSize] = useElementSize<HTMLDivElement>();
+  const GAP = 6;
+  const { cols, size: tile } = packGrid(gridSize.w, gridSize.h, characters.length, GAP, 150);
+  const emojiPx = Math.round(tile * 0.42);
+  const namePx = Math.max(8, Math.min(Math.round(tile * 0.15), 15));
 
   const handleSelect = (id: string) => {
     setSelectedId(id);
@@ -84,41 +121,55 @@ export default function CharacterSelect() {
 
       {/* Body: roster grid + detail panel */}
       <div className="flex-1 flex gap-2 min-h-0">
-        {/* Roster — square tiles so emoji + name always fit; scrolls if the
-            device is too short to show every row. */}
-        <div className="flex-1 min-h-0 overflow-y-auto -mr-1 pr-1">
-          <div className="grid grid-cols-5 gap-1.5 content-start">
-            {characters.map((character) => {
-              const isSelected = character.id === selectedId;
-              const a = accentOf(character.id);
-              return (
-                <motion.button
-                  key={character.id}
-                  onClick={() => handleSelect(character.id)}
-                  whileTap={{ scale: 0.94 }}
-                  className="relative aspect-square rounded-xl border-2 flex flex-col items-center justify-center
-                           bg-gray-800/70 hover:bg-gray-700/70 transition-colors"
-                  style={{
-                    borderColor: isSelected ? a : 'rgba(75,85,99,0.55)',
-                    boxShadow: isSelected ? `0 0 18px ${a}66, inset 0 0 16px ${a}22` : undefined,
-                  }}
-                >
-                  <span
-                    className="text-2xl sm:text-3xl lg:text-4xl leading-none"
-                    style={{ filter: isSelected ? `drop-shadow(0 0 8px ${a}aa)` : undefined }}
+        {/* Roster — adapts to the available box: columns and tile size are
+            chosen to pack every fighter in with no scroll or overlap, and the
+            emoji/name scale with the tiles. */}
+        <div ref={gridRef} className="flex-1 min-h-0">
+          {tile > 0 && (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: `repeat(${cols}, ${tile}px)`,
+                gap: `${GAP}px`,
+                justifyContent: 'center',
+                alignContent: 'center',
+                height: '100%',
+              }}
+            >
+              {characters.map((character) => {
+                const isSelected = character.id === selectedId;
+                const a = accentOf(character.id);
+                return (
+                  <motion.button
+                    key={character.id}
+                    onClick={() => handleSelect(character.id)}
+                    whileTap={{ scale: 0.94 }}
+                    className="relative rounded-xl border-2 flex flex-col items-center justify-center overflow-hidden
+                             bg-gray-800/70 hover:bg-gray-700/70 transition-colors"
+                    style={{
+                      width: tile,
+                      height: tile,
+                      borderColor: isSelected ? a : 'rgba(75,85,99,0.55)',
+                      boxShadow: isSelected ? `0 0 18px ${a}66, inset 0 0 16px ${a}22` : undefined,
+                    }}
                   >
-                    {character.emoji}
-                  </span>
-                  <span
-                    className="mt-0.5 w-full px-0.5 text-[9px] sm:text-[10px] lg:text-xs font-semibold leading-[1.05] text-center line-clamp-2"
-                    style={{ color: isSelected ? '#fff' : '#cbd5e1' }}
-                  >
-                    {character.name}
-                  </span>
-                </motion.button>
-              );
-            })}
-          </div>
+                    <span
+                      className="leading-none"
+                      style={{ fontSize: emojiPx, filter: isSelected ? `drop-shadow(0 0 8px ${a}aa)` : undefined }}
+                    >
+                      {character.emoji}
+                    </span>
+                    <span
+                      className="w-full px-0.5 font-semibold leading-[1.05] text-center line-clamp-2"
+                      style={{ marginTop: tile * 0.04, fontSize: namePx, color: isSelected ? '#fff' : '#cbd5e1' }}
+                    >
+                      {character.name}
+                    </span>
+                  </motion.button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Detail panel — FIGHT stays pinned at the bottom; the description
