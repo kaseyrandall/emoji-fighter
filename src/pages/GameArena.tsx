@@ -293,37 +293,32 @@ export default function GameArena() {
       {/* Ambient Light Overlay */}
       <div className={`absolute inset-0 ${stage?.ambientLight} mix-blend-overlay`} />
       
-      {/* Health Bars */}
-      <div className="relative w-full max-w-4xl flex justify-between items-start gap-8 sm:gap-10 px-3 sm:px-4 pt-2 z-10">
-        {/* Pause Button — only while playing; resume happens via the overlay,
-            so a stray double-tap can't immediately toggle back to playing. */}
-        {gameStatus === 'playing' && (
-          <button
-            onClick={pauseGame}
-            className="fixed top-2 left-2 z-20 w-8 h-8 bg-gray-700/50 rounded-lg hover:bg-gray-600/50
-                     flex items-center justify-center backdrop-blur-sm"
-          >
-            <Pause size={16} />
-          </button>
-        )}
+      {/* Top HUD — corner portraits, full-width health bars meeting a central
+          round/timer badge (MK-style). */}
+      <div className="relative w-full max-w-5xl mx-auto flex items-start gap-1.5 sm:gap-3 px-2 sm:px-3 pt-2 z-10">
+        {/* Player portrait */}
+        <div
+          className="shrink-0 w-11 h-11 sm:w-14 sm:h-14 rounded-lg flex items-center justify-center text-2xl sm:text-4xl bg-gray-900/60 backdrop-blur-sm transition-colors"
+          style={{ border: `2px solid ${specialReady ? '#d8b4fe' : 'rgba(34,197,94,0.7)'}` }}
+        >
+          {selectedCharacter.emoji}
+        </div>
 
-        <div className="flex-1 min-w-0 pl-9 sm:pl-10">
-          <div className="flex justify-between items-center gap-1 mb-0.5">
-            <div className="flex items-center gap-1 min-w-0">
-              <div className="flex gap-0.5 shrink-0">
-                {[0, 1].map((i) => (
-                  <span key={i} className="w-1.5 h-1.5 rounded-full" style={{ background: i < playerWins ? '#fbbf24' : 'rgba(255,255,255,0.25)' }} />
-                ))}
-              </div>
-              <span className="truncate text-[10px] sm:text-xs">{selectedCharacter.name}</span>
+        {/* Player info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1 mb-0.5">
+            <span className="truncate text-[10px] sm:text-xs font-semibold">{selectedCharacter.name}</span>
+            <div className="flex gap-0.5 shrink-0 ml-auto">
+              {[0, 1].map((i) => (
+                <span key={i} className="w-1.5 h-1.5 rounded-full" style={{ background: i < playerWins ? '#fbbf24' : 'rgba(255,255,255,0.25)' }} />
+              ))}
             </div>
-            <span className="shrink-0 text-[10px] sm:text-xs text-gray-300">{playerHealth}%</span>
           </div>
-          <div className="h-2.5 sm:h-3 bg-gray-700 rounded-full overflow-hidden">
-            <div className="h-full bg-green-500 transition-all duration-300" style={{ width: `${playerHealth}%` }} />
+          <div className="h-2.5 sm:h-3.5 bg-gray-800/80 rounded-full overflow-hidden border border-black/40">
+            <div className="h-full bg-gradient-to-r from-green-400 to-green-500 transition-all duration-300" style={{ width: `${playerHealth}%` }} />
           </div>
-          {/* super meter */}
-          <div className="mt-1 h-1.5 bg-gray-700/70 rounded-full overflow-hidden">
+          {/* super meter (charged by landing attacks) */}
+          <div className="mt-1 h-1.5 bg-gray-800/70 rounded-full overflow-hidden">
             <div
               className="h-full transition-all duration-200"
               style={{
@@ -333,48 +328,51 @@ export default function GameArena() {
               }}
             />
           </div>
-          <div className="text-[8px] text-purple-300/80 mt-0.5">{specialReady ? '✨ SPECIAL READY' : 'SPECIAL'}</div>
         </div>
 
-        <div className="font-arcade text-xl sm:text-3xl text-red-500 self-center drop-shadow-[0_0_10px_rgba(255,0,0,0.5)]">
-          VS
+        {/* Central round / timer badge */}
+        <div className="shrink-0 flex flex-col items-center -mt-0.5">
+          <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-full bg-gray-900/70 border-2 border-yellow-500/80 flex items-center justify-center text-yellow-400 text-sm sm:text-xl font-bold tabular-nums shadow-[0_0_12px_rgba(234,179,8,0.4)]">
+            {timer}
+          </div>
+          <div className="text-[8px] sm:text-[9px] text-gray-300 mt-0.5 tracking-wide uppercase leading-none">Round {round}</div>
+          {gauntletOpponents.length > 0 && (
+            <div className="text-[7px] sm:text-[8px] text-orange-300/80 leading-none mt-0.5">{gauntletStage + 1}/{gauntletOpponents.length}</div>
+          )}
+          {gameStatus === 'playing' && (
+            <button
+              onClick={pauseGame}
+              className="mt-1 w-6 h-6 bg-gray-700/60 rounded-md hover:bg-gray-600/60 flex items-center justify-center backdrop-blur-sm"
+              aria-label="Pause"
+            >
+              <Pause size={13} />
+            </button>
+          )}
         </div>
 
+        {/* Opponent info */}
         <div className="flex-1 min-w-0">
-          <div className="flex justify-between items-center gap-1 mb-0.5">
-            <span className="shrink-0 text-[10px] sm:text-xs text-gray-300">{opponentHealth}%</span>
-            <div className="flex items-center gap-1 min-w-0 justify-end">
-              <span className="truncate text-[10px] sm:text-xs text-right">{opponent.name}</span>
-              <div className="flex gap-0.5 shrink-0">
-                {[0, 1].map((i) => (
-                  <span key={i} className="w-1.5 h-1.5 rounded-full" style={{ background: i < opponentWins ? '#fbbf24' : 'rgba(255,255,255,0.25)' }} />
-                ))}
-              </div>
+          <div className="flex items-center gap-1 mb-0.5">
+            <div className="flex gap-0.5 shrink-0">
+              {[0, 1].map((i) => (
+                <span key={i} className="w-1.5 h-1.5 rounded-full" style={{ background: i < opponentWins ? '#fbbf24' : 'rgba(255,255,255,0.25)' }} />
+              ))}
             </div>
+            <span className="truncate text-[10px] sm:text-xs font-semibold text-right ml-auto">{opponent.name}</span>
           </div>
-          <div className="h-2.5 sm:h-3 bg-gray-700 rounded-full overflow-hidden">
-            <div className="h-full bg-green-500 transition-all duration-300" style={{ width: `${opponentHealth}%` }} />
+          <div className="h-2.5 sm:h-3.5 bg-gray-800/80 rounded-full overflow-hidden border border-black/40 flex justify-end">
+            <div className="h-full bg-gradient-to-l from-red-400 to-red-500 transition-all duration-300" style={{ width: `${opponentHealth}%` }} />
           </div>
+        </div>
+
+        {/* Opponent portrait */}
+        <div className="shrink-0 w-11 h-11 sm:w-14 sm:h-14 rounded-lg flex items-center justify-center text-2xl sm:text-4xl bg-gray-900/60 backdrop-blur-sm border-2 border-red-500/70">
+          {opponent.emoji}
         </div>
       </div>
 
       {/* Arena */}
       <div className="relative flex-1 w-full flex flex-col justify-end pb-8 lg:pb-0">
-        {/* Timer, Round, and Gauntlet progress */}
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 flex flex-col items-center z-10 drop-shadow-[0_0_10px_rgba(255,0,0,0.5)]">
-          <div className="text-lg text-yellow-400">
-            {timer}
-          </div>
-          <div className="text-md text-white">
-            Round {round}
-          </div>
-          {gauntletOpponents.length > 0 && (
-            <div className="text-[10px] lg:text-xs text-orange-300 mt-0.5">
-              Fight {gauntletStage + 1} / {gauntletOpponents.length}
-            </div>
-          )}
-        </div>
-        
         {/* Floor */}
         <div className={`absolute bottom-0 w-full h-48 ${stage?.floorColor}`} />
         
@@ -602,41 +600,47 @@ export default function GameArena() {
       {/* Controls — kept mounted across the round countdown too, so a joystick
           held through a KO doesn't lose the still-down finger on the next round. */}
       {(gameStatus === 'ready' || gameStatus === 'playing') && (
-        <div className="game-controls lg:hidden">
+        <div className="game-controls lg:hidden items-end">
           {/* Movement joystick */}
           <Joystick onMoveDir={setMoveDir} onJump={() => performMove('jump')} size={116} />
 
-          {/* Attack Controls */}
-          <div className="flex gap-4">
-            <button
-              onClick={() => { performMove('punch'); playMoveSound('punch'); }}
-              className="attack-button punch"
-            >👊</button>
-            <button
-              onClick={() => { performMove('kick'); playMoveSound('kick'); }}
-              className="attack-button kick"
-            >🦶</button>
-            <button
+          {/* Attack cluster — punch/kick as the primary pair (thumb-height),
+              special raised and prominent between them. */}
+          <div className="relative w-[9.5rem] h-[7rem] shrink-0 select-none">
+            {/* Special (occasional, glows purple once the super meter is full) */}
+            <motion.button
               onClick={useSpecial}
-              className="attack-button special relative overflow-hidden"
+              className="game-button absolute top-0 left-1/2 -translate-x-1/2 w-[3.75rem] h-[3.75rem] rounded-full flex items-center justify-center text-2xl overflow-hidden active:brightness-110"
               style={{
+                background: 'radial-gradient(circle at 50% 35%, #a855f7, #6b21a8)',
                 opacity: specialReady ? 1 : 0.55,
-                boxShadow: specialReady ? '0 0 16px rgba(216,180,254,0.9)' : undefined,
+                border: '2px solid rgba(216,180,254,0.6)',
+                boxShadow: specialReady ? '0 0 20px rgba(216,180,254,0.9)' : undefined,
               }}
+              animate={specialReady ? { scale: [1, 1.09, 1] } : { scale: 1 }}
+              transition={specialReady ? { duration: 0.9, repeat: Infinity } : { duration: 0.2 }}
+              aria-label="Special"
             >
               {/* super meter fill (charged by landing attacks) */}
               <span
                 className="absolute inset-x-0 bottom-0 bg-purple-300/70 pointer-events-none transition-[height] duration-200"
                 style={{ height: `${specialMeter}%` }}
               />
-              <motion.span
-                className="relative"
-                animate={specialReady ? { scale: [1, 1.18, 1] } : { scale: 1 }}
-                transition={specialReady ? { duration: 0.9, repeat: Infinity } : { duration: 0.2 }}
-              >
-                ✨
-              </motion.span>
-            </button>
+              <span className="relative">✨</span>
+            </motion.button>
+
+            {/* Punch (primary) */}
+            <button
+              onClick={() => { performMove('punch'); playMoveSound('punch'); }}
+              className="game-button absolute bottom-0 left-0 w-[4.25rem] h-[4.25rem] rounded-full flex items-center justify-center text-3xl bg-red-500/45 border-2 border-red-400/40 active:bg-red-600/60"
+              aria-label="Punch"
+            >👊</button>
+            {/* Kick (primary) */}
+            <button
+              onClick={() => { performMove('kick'); playMoveSound('kick'); }}
+              className="game-button absolute bottom-0 right-0 w-[4.25rem] h-[4.25rem] rounded-full flex items-center justify-center text-3xl bg-blue-500/45 border-2 border-blue-400/40 active:bg-blue-600/60"
+              aria-label="Kick"
+            >🦶</button>
           </div>
         </div>
       )}
