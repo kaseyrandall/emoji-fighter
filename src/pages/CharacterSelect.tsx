@@ -38,28 +38,28 @@ export default function CharacterSelect() {
   };
 
   const StatDisplay = ({ value, icon: Icon, label }: { value: number; icon: typeof Activity; label: string }) => (
-    <div className="flex items-center gap-3 bg-gray-800/50 px-3 py-2 rounded">      
-      <span className="text-xs text-left">{label}</span>
-      <span className="text-xs text-yellow-400 ml-auto">{value}</span>
+    <div className="flex items-center gap-2 bg-gray-800/50 px-2 py-1 lg:px-3 lg:py-2 rounded">
+      <span className="text-[10px] lg:text-xs text-left leading-tight">{label}</span>
+      <span className="text-[10px] lg:text-xs text-yellow-400 ml-auto">{value}</span>
     </div>
   );
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-2 px-4 py-16 lg:py-4">
+    <div className="min-h-[100dvh] flex flex-col items-center justify-center gap-1 px-3 py-2 overflow-y-auto">
       <button
         onClick={() => navigate('/')}
-        className="fixed top-3 left-3 z-10 p-2 text-gray-400 hover:text-white transition-colors
-                 flex items-center gap-2 bg-gray-800/50 rounded-lg backdrop-blur-sm text-xs lg:text-sm"
+        className="fixed top-2 left-2 z-10 p-2 text-gray-400 hover:text-white transition-colors
+                 flex items-center gap-1 bg-gray-800/50 rounded-lg backdrop-blur-sm text-xs lg:text-sm"
       >
-        <ArrowLeft size={18} />
+        <ArrowLeft size={16} />
         <span>Back</span>
       </button>
 
-      <h2 className="text-xl lg:text-4xl font-bold mb-2 lg:mb-4 text-center">Choose Your Fighter</h2>
-      <div className="text-xs lg:text-sm text-center px-4 pb-2 lg:pb-4 text-gray-400">
-        Use keyboard (WASD/JKL) on desktop or touch controls on mobile
+      <h2 className="text-lg lg:text-4xl font-bold text-center">Choose Your Fighter</h2>
+      <div className="text-[10px] lg:text-sm text-center px-4 pb-1 lg:pb-3 text-gray-400">
+        Keyboard (WASD/JKL) on desktop, touch controls on mobile
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 lg:gap-5 max-w-5xl w-full">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 lg:gap-4 max-w-5xl w-full">
         {characters.map((character) => (
           <motion.button
             key={character.id}
@@ -70,15 +70,15 @@ export default function CharacterSelect() {
               scale: selectedId === character.id ? [1, 1.1, 1] : 1,
               borderColor: selectedId === character.id ? '#ffd700' : '#1f2937'
             }}
-            className={`bg-gray-800 p-3 lg:p-5 rounded-lg border-2 transition-colors
-                     flex flex-col items-center gap-2 lg:gap-3 group relative
+            className={`bg-gray-800 p-2 lg:p-4 rounded-lg border-2 transition-colors
+                     flex flex-col items-center gap-1 lg:gap-3 group relative
                      ${selectedId === character.id ? 'border-yellow-400' : 'border-transparent'}`}
           >
-            <div className="text-4xl lg:text-6xl group-hover:scale-110 transition-transform">
+            <div className="text-3xl lg:text-6xl group-hover:scale-110 transition-transform">
               {character.emoji}
             </div>
             <div className="text-center w-full">
-              <div className="font-bold text-sm lg:text-base mb-1 lg:mb-2">{character.name}</div>
+              <div className="font-bold text-xs lg:text-base mb-1 lg:mb-2 leading-tight">{character.name}</div>
               <p className="hidden lg:block text-xs text-gray-400 mb-3">{character.description}</p>
               <div className="space-y-1">
                 <StatDisplay value={character.moves.punch} icon={Fist} label="Punch" />

@@ -315,19 +315,19 @@ export default function GameArena() {
           className="relative flex items-end justify-around w-full max-w-4xl mx-auto"
           animate={arenaControls}
         >
-          {/* Floating damage numbers */}
+          {/* Floating damage numbers — centered over the struck fighter, kept clear of the top HUD */}
           <AnimatePresence>
             {floatingHits.map(h => (
               <motion.div
                 key={h.id}
                 className={`absolute pointer-events-none font-arcade font-bold z-20 ${
-                  h.special ? 'text-yellow-300 text-4xl' : 'text-red-500 text-3xl'
-                } drop-shadow-[0_2px_6px_rgba(0,0,0,0.8)]`}
-                style={{ left: `${h.x}%`, bottom: '220px' }}
+                  h.special ? 'text-yellow-300 text-lg lg:text-4xl' : 'text-red-500 text-base lg:text-3xl'
+                } drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]`}
+                style={{ left: `${h.x}%`, bottom: '90px', x: '-50%' }}
                 initial={{ opacity: 0, y: 0, scale: 0.6 }}
-                animate={{ opacity: 1, y: -70, scale: 1 }}
+                animate={{ opacity: 1, y: -25, scale: 1 }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: 0.8, ease: 'easeOut' }}
+                transition={{ duration: 0.7, ease: 'easeOut' }}
               >
                 -{h.amount}
               </motion.div>
