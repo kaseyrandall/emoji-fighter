@@ -7,37 +7,27 @@ import { Swords, ArrowLeft } from 'lucide-react';
 const EmojiRain = () => {
   const emojis = ['🥷', '🤖', '👽', '🐲', '💩', '👊', '🦾', '💥', '⚡️', '🔥'];
   const [particles, setParticles] = React.useState<Array<{ id: number; emoji: string; x: number; scale: number; speed: number }>>([]);
-  const [count, setCount] = React.useState(0);
+  const nextId = React.useRef(0);
 
   React.useEffect(() => {
-    // Initial particles
-    setParticles(Array.from({ length: 20 }, (_, i) => ({
-      id: i,
+    const makeParticle = () => ({
+      id: nextId.current++,
       emoji: emojis[Math.floor(Math.random() * emojis.length)],
       x: Math.random() * 100,
       scale: 0.5 + Math.random() * 1.5,
       speed: 3 + Math.random() * 5
-    })));
+    });
 
-    // Continuously add new particles
+    // Initial particles
+    setParticles(Array.from({ length: 20 }, makeParticle));
+
+    // Continuously add new particles, dropping the oldest so the list stays bounded
     const interval = setInterval(() => {
-      setCount(c => c + 1);
-      setParticles(current => {
-        // Remove particles that have fallen off screen
-        const filtered = current.filter(p => p.id > count - 30);
-        
-        // Add new particles
-        return [...filtered, {
-          id: count,
-          emoji: emojis[Math.floor(Math.random() * emojis.length)],
-          x: Math.random() * 100,
-          scale: 0.5 + Math.random() * 1.5,
-          speed: 3 + Math.random() * 5
-        }];
-      });
+      setParticles(current => [...current.slice(-29), makeParticle()]);
     }, 300);
 
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

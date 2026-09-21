@@ -1,10 +1,10 @@
-// Import stage backgrounds
-import nightMarket from '/assets/night-market.png';
-import retroArcade from '/assets/retro-arcade.png';
-import rooftopParty from '/assets/rooftop-party.png';
-import seafoodPier from '/assets/seafood-pier.png';
-import spaceStation from '/assets/space-station.png';
-import westernTown from '/assets/western-town.png';
+// Stage backgrounds live in the public/ folder and are referenced by URL.
+const nightMarket = '/assets/night-market.png';
+const retroArcade = '/assets/retro-arcade.png';
+const rooftopParty = '/assets/rooftop-party.png';
+const seafoodPier = '/assets/seafood-pier.png';
+const spaceStation = '/assets/space-station.png';
+const westernTown = '/assets/western-town.png';
 
 import { Stage } from '../types/game';
 

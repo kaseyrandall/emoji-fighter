@@ -3,93 +3,197 @@ import { useNavigate } from 'react-router-dom';
 import ReactGA from 'react-ga4';
 import { motion } from 'framer-motion';
 import { characters } from '../data/characters';
-import { useGameStore } from '../store/gameStore';
-import { Activity, Zap, Sword, Fish as Fist, Bot as Boot, Sparkles, ArrowLeft } from 'lucide-react';
+import { useGameStore, GAUNTLET_SIZE } from '../store/gameStore';
+import { Swords, Sparkles, ArrowLeft } from 'lucide-react';
+import { Character } from '../types/game';
+
+// Signature colour per fighter — drives the tile glow, stat bars, name glow,
+// and the reactive background so each pick feels distinct.
+const ACCENTS: Record<string, string> = {
+  ninja: '#818cf8', robot: '#22d3ee', alien: '#a78bfa', dragon: '#10b981',
+  poop: '#d97706', ghost: '#cbd5e1', zombie: '#84cc16', trex: '#22c55e',
+  octopus: '#f472b6', gorilla: '#9ca3af', devil: '#a855f7', ice: '#38bdf8',
+  chicken: '#facc15', unicorn: '#e879f9', clown: '#ef4444',
+};
+const accentOf = (id: string) => ACCENTS[id] ?? '#f59e0b';
+
+const overallOf = (c: Character) =>
+  Math.round(((c.stats.power + c.stats.speed + c.stats.technique) / 3) * 10) / 10;
+const tierOf = (ovr: number) => (ovr >= 8.7 ? 'S' : ovr >= 8 ? 'A' : ovr >= 7.3 ? 'B' : 'C');
+
+const StatBar = ({ label, value, accent }: { label: string; value: number; accent: string }) => (
+  <div className="flex items-center gap-2">
+    <span className="w-9 sm:w-12 text-[11px] sm:text-xs text-gray-400 text-left shrink-0 whitespace-nowrap">{label}</span>
+    <div className="flex-1 h-2.5 sm:h-3 bg-gray-700/80 rounded-full overflow-hidden">
+      <motion.div
+        className="h-full rounded-full"
+        style={{ background: `linear-gradient(90deg, ${accent}, ${accent}aa)` }}
+        initial={{ width: 0 }}
+        animate={{ width: `${Math.min(100, (value / 10) * 100)}%` }}
+        transition={{ duration: 0.5, ease: 'easeOut' }}
+      />
+    </div>
+    <span className="w-4 text-right text-[10px] sm:text-xs text-gray-400 tabular-nums shrink-0">{value}</span>
+  </div>
+);
 
 export default function CharacterSelect() {
   const navigate = useNavigate();
-  const { selectCharacter, selectOpponent } = useGameStore();
-  const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  const startGauntlet = useGameStore((s) => s.startGauntlet);
+  const [selectedId, setSelectedId] = React.useState<string>(characters[0].id);
 
-  const handleCharacterSelect = (characterId: string) => {
-    setSelectedId(characterId);
-    
-    const character = characters.find(c => c.id === characterId);
-    if (character) {
-      ReactGA.event({
-        category: 'Game',
-        action: 'Character Selected',
-        label: character.name
-      });
-    }
-    
-    // Play selection sound
-    new Audio('/assets/select.mp3').play().catch(() => {});
-    
-    // Delay navigation to show selection effect
-    setTimeout(() => {
-    const character = characters.find(c => c.id === characterId);
-    if (character) {
-      selectCharacter(character);
-      selectOpponent();
-      navigate('/arena');
-    }
-    }, 500);
+  const selected = characters.find((c) => c.id === selectedId) || characters[0];
+  const accent = accentOf(selected.id);
+  const overall = overallOf(selected);
+  const tier = tierOf(overall);
+
+  const handleSelect = (id: string) => {
+    setSelectedId(id);
+    new Audio('/assets/select.wav').play().catch(() => {});
   };
 
-  const StatDisplay = ({ value, icon: Icon, label }: { value: number; icon: typeof Activity; label: string }) => (
-    <div className="flex items-center gap-3 bg-gray-800/50 px-3 py-2 rounded">      
-      <span className="text-xs text-left">{label}</span>
-      <span className="text-xs text-yellow-400 ml-auto">{value}</span>
-    </div>
-  );
+  const handleFight = () => {
+    ReactGA.event({ category: 'Game', action: 'Fight Started', label: selected.name });
+    startGauntlet(selected);
+    navigate('/arena');
+  };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4">
-      <button
-        onClick={() => navigate('/')}
-        className="absolute top-4 left-4 p-2 text-gray-400 hover:text-white transition-colors
-                 flex items-center gap-2 bg-gray-800/50 rounded-lg backdrop-blur-sm text-sm"
-      >
-        <ArrowLeft size={18} />
-        <span>Back</span>
-      </button>
-      
-      <h2 className="text-2xl lg:text-4xl font-bold mb-8">Choose Your Fighter</h2>
-      <div className="text-sm text-center p-8 text-gray-400">
-        Use keyboard (WASD/JKL) on desktop or touch controls on mobile
+    <div className="relative h-[100dvh] flex flex-col overflow-hidden px-3 pt-2 pb-2">
+      {/* Reactive background glow, tinted by the selected fighter */}
+      <div
+        className="pointer-events-none absolute inset-0 -z-10 transition-all duration-500"
+        style={{ background: `radial-gradient(60% 60% at 78% 50%, ${accent}22, transparent 70%)` }}
+      />
+
+      <div className="flex items-center justify-between mb-1 shrink-0">
+        <button
+          onClick={() => navigate('/')}
+          className="p-2 text-gray-400 hover:text-white transition-colors flex items-center gap-1
+                   bg-gray-800/50 rounded-lg backdrop-blur-sm text-xs lg:text-sm"
+        >
+          <ArrowLeft size={16} />
+          <span>Back</span>
+        </button>
+        <h2 className="text-base lg:text-3xl font-bold text-center bg-gradient-to-b from-white to-gray-400 bg-clip-text text-transparent">
+          Choose Your Fighter
+        </h2>
+        <div className="w-14" />
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-5xl">
-        {characters.map((character) => (
-          <motion.button
-            key={character.id}
-            onClick={() => handleCharacterSelect(character.id)}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            animate={{
-              scale: selectedId === character.id ? [1, 1.1, 1] : 1,
-              borderColor: selectedId === character.id ? '#ffd700' : '#1f2937'
-            }}
-            className={`bg-gray-800 p-6 rounded-lg border-2 transition-colors
-                     flex flex-col items-center gap-4 group relative
-                     ${selectedId === character.id ? 'border-yellow-400' : 'border-transparent'}`}
+
+      <div className="flex-1 flex gap-3 min-h-0">
+        {/* Portrait grid — fills the available space, rows share the height */}
+        <div className="flex-1 min-h-0">
+          <div className="grid grid-cols-4 sm:grid-cols-5 auto-rows-fr gap-1.5 lg:gap-2 h-full">
+            {characters.map((character) => {
+              const isSelected = character.id === selectedId;
+              const a = accentOf(character.id);
+              return (
+                <motion.button
+                  key={character.id}
+                  onClick={() => handleSelect(character.id)}
+                  whileHover={{ scale: 1.04 }}
+                  whileTap={{ scale: 0.95 }}
+                  className="relative min-h-0 rounded-xl border-2 flex flex-col items-center justify-center gap-1.5 lg:gap-2.5 p-1
+                           bg-gray-800/70 hover:bg-gray-700/70 transition-colors"
+                  style={{
+                    borderColor: isSelected ? a : 'rgba(75,85,99,0.6)',
+                    boxShadow: isSelected ? `0 0 22px ${a}66, inset 0 0 18px ${a}22` : undefined,
+                  }}
+                >
+                  <motion.span
+                    className="text-4xl sm:text-5xl leading-none"
+                    animate={{ scale: isSelected ? 1.08 : 1 }}
+                    transition={{ type: 'spring', stiffness: 300, damping: 15 }}
+                    style={{ filter: isSelected ? `drop-shadow(0 0 10px ${a}aa)` : undefined }}
+                  >
+                    {character.emoji}
+                  </motion.span>
+                  <span
+                    className="w-full text-[10px] sm:text-[11px] lg:text-xs font-semibold leading-[1.05] text-center line-clamp-2"
+                    style={{ color: isSelected ? '#fff' : '#d1d5db' }}
+                  >
+                    {character.name}
+                  </span>
+                </motion.button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Detail / stats panel */}
+        <motion.div
+          key={selected.id}
+          initial={{ opacity: 0, x: 12 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.2 }}
+          className="relative w-40 sm:w-52 lg:w-72 shrink-0 flex flex-col rounded-xl p-2 lg:p-4 border overflow-hidden bg-gray-900/70"
+          style={{ borderColor: `${accent}88`, boxShadow: `0 0 30px ${accent}22 inset` }}
+        >
+          {/* Giant faded emoji watermark */}
+          <span
+            className="pointer-events-none absolute -right-6 -bottom-8 text-[10rem] lg:text-[14rem] leading-none opacity-[0.07] select-none"
+            aria-hidden
           >
-            <div className="text-5xl lg:text-7xl group-hover:scale-110 transition-transform">
-              {character.emoji}
-            </div>
-            <div className="text-center">
-              <div className="font-bold mb-2">{character.name}</div>
-              <p className="text-xs text-gray-400 mb-4">{character.description}</p>
-              <div className="space-y-0">
-                <StatDisplay value={character.moves.punch} icon={Fist} label="Punch" />
-                <StatDisplay value={character.moves.kick} icon={Boot} label="Kick" />
-                <StatDisplay value={character.moves.special} icon={Sparkles} label={character.specialName} />
+            {selected.emoji}
+          </span>
+
+          <div className="relative flex items-start gap-2 lg:gap-3">
+            <span className="text-5xl sm:text-6xl lg:text-7xl leading-none" style={{ filter: `drop-shadow(0 0 12px ${accent}88)` }}>
+              {selected.emoji}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-start gap-1.5">
+                <div
+                  className="font-bold text-lg sm:text-xl lg:text-2xl leading-tight flex-1"
+                  style={{ textShadow: `0 0 14px ${accent}66` }}
+                >
+                  {selected.name}
+                </div>
+                <div
+                  className="shrink-0 w-6 h-6 lg:w-8 lg:h-8 rounded-md flex items-center justify-center font-bold text-sm lg:text-lg"
+                  style={{ background: `${accent}22`, color: accent, border: `1px solid ${accent}88` }}
+                  title={`Overall ${overall}`}
+                >
+                  {tier}
+                </div>
+              </div>
+              <div className="flex items-center gap-1 text-[11px] sm:text-xs lg:text-sm mt-0.5" style={{ color: accent }}>
+                <Sparkles size={12} className="shrink-0" />
+                <span>{selected.specialName}</span>
               </div>
             </div>
-          </motion.button>
-        ))}
+          </div>
+
+          <p className="relative text-[11px] sm:text-xs lg:text-sm text-gray-400 mt-2 lg:mt-3 leading-snug">
+            {selected.description}
+          </p>
+
+          <div className="relative mt-3 lg:mt-4 space-y-2 lg:space-y-2.5">
+            <StatBar label="POW" value={selected.stats.power} accent={accent} />
+            <StatBar label="SPD" value={selected.stats.speed} accent={accent} />
+            <StatBar label="TEC" value={selected.stats.technique} accent={accent} />
+          </div>
+
+          <div className="relative mt-auto pt-2">
+            <div className="text-[9px] lg:text-[11px] text-gray-400 text-center mb-1">
+              Gauntlet: {GAUNTLET_SIZE} fights, rising difficulty
+            </div>
+            <motion.button
+              onClick={handleFight}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.96 }}
+              animate={{ boxShadow: ['0 0 0px rgba(239,68,68,0)', '0 0 22px rgba(239,68,68,0.55)', '0 0 0px rgba(239,68,68,0)'] }}
+              transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+              className="w-full py-2 lg:py-3 bg-gradient-to-r from-red-600 to-orange-500 rounded-lg
+                       font-bold text-sm lg:text-lg flex items-center justify-center gap-2"
+            >
+              <Swords size={18} />
+              FIGHT
+            </motion.button>
+          </div>
+        </motion.div>
       </div>
-      
     </div>
   );
 }

@@ -22,8 +22,11 @@ export interface GameState {
   opponent: Character | null;
   playerHealth: number;
   opponentHealth: number;
-  gameStatus: 'ready' | 'playing' | 'paused' | 'won' | 'lost';
+  gameStatus: 'intro' | 'ready' | 'playing' | 'paused' | 'won' | 'lost' | 'champion';
   round: number;
+  // Gauntlet ladder: ordered opponents the player faces, easiest first.
+  gauntletOpponents: Character[];
+  gauntletStage: number;
   playerPosition: number;
   playerY: number;
   opponentPosition: number;
@@ -36,6 +39,16 @@ export interface GameState {
   playerWins: number;
   opponentWins: number;
   isJumping: boolean;
+  hitEvent: HitEvent | null;
+  // Which way the player emoji faces — follows the last horizontal input.
+  playerFacing: 'left' | 'right';
+}
+
+export interface HitEvent {
+  target: 'player' | 'opponent';
+  amount: number;
+  move: Move | null;
+  seq: number;
 }
 
 export type Move = 'punch' | 'kick' | 'special' | 'left' | 'right' | 'jump';
