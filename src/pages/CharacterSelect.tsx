@@ -68,13 +68,11 @@ export default function CharacterSelect() {
   // Random stage as an atmospheric, blurred backdrop.
   const backdrop = React.useMemo(() => stages[Math.floor(Math.random() * stages.length)].background, []);
 
-  // Two horizontally-scrolling rows; tile size follows the row height.
+  // Roster: two rows that scroll together as one unit; tile size follows the
+  // available height of the scroll area.
   const [rosterRef, rosterSize] = useElementSize<HTMLDivElement>();
   const GAP = 8;
-  const rowH = Math.max(0, (rosterSize.h - GAP) / 2);
-  const tile = Math.min(rowH, 150);
-  const half = Math.ceil(characters.length / 2);
-  const rows = [characters.slice(0, half), characters.slice(half)];
+  const tile = Math.min(Math.max(0, (rosterSize.h - GAP) / 2), 118);
 
   const handleSelect = (id: string) => {
     setSelectedId(id);
@@ -100,9 +98,11 @@ export default function CharacterSelect() {
       <motion.button
         onClick={() => handleSelect(character.id)}
         whileTap={{ scale: 0.94 }}
-        className="relative shrink-0 aspect-square h-full rounded-xl border-2 flex flex-col items-center justify-center
+        className="relative rounded-xl border-2 flex flex-col items-center justify-center
                  overflow-hidden bg-gray-900/50 backdrop-blur-sm hover:bg-gray-800/60 transition-colors"
         style={{
+          width: tile,
+          height: tile,
           borderColor: isSelected ? a : 'rgba(148,163,184,0.25)',
           boxShadow: isSelected ? `0 0 18px ${a}66, inset 0 0 16px ${a}22` : undefined,
         }}
@@ -169,30 +169,28 @@ export default function CharacterSelect() {
         </div>
       </div>
 
-      {/* Body: hero splash + two roster rows */}
-      <div className="flex-1 flex gap-2 sm:gap-3 min-h-0 px-3 pb-2 pt-1">
-        {/* Hero */}
+      {/* Body: hero band on top, roster flowing underneath */}
+      <div className="flex-1 flex flex-col gap-2 min-h-0 px-3 pb-2 pt-1">
+        {/* Hero band */}
         <motion.div
           key={selected.id}
-          initial={{ opacity: 0, x: -12 }}
-          animate={{ opacity: 1, x: 0 }}
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.2 }}
-          className="w-[32%] max-w-[16rem] shrink-0 flex flex-col min-h-0"
+          className="shrink-0 flex items-center gap-3"
         >
-          <div className="flex-1 min-h-0 flex items-center justify-center overflow-hidden">
-            <motion.span
-              className="leading-none text-5xl sm:text-7xl lg:text-8xl"
-              style={{ filter: `drop-shadow(0 6px 18px ${accent}aa)` }}
-              animate={{ y: [0, -6, 0] }}
-              transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-            >
-              {selected.emoji}
-            </motion.span>
-          </div>
+          <motion.span
+            className="shrink-0 leading-none text-6xl sm:text-7xl lg:text-8xl"
+            style={{ filter: `drop-shadow(0 6px 18px ${accent}aa)` }}
+            animate={{ y: [0, -5, 0] }}
+            transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+          >
+            {selected.emoji}
+          </motion.span>
 
-          <div className="shrink-0">
-            <div className="flex items-start gap-1.5">
-              <h3 className="flex-1 min-w-0 font-bold text-lg sm:text-xl leading-[1.05] break-words line-clamp-2" style={{ textShadow: `0 0 14px ${accent}88` }}>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5">
+              <h3 className="flex-1 min-w-0 truncate font-bold text-lg sm:text-2xl leading-none" style={{ textShadow: `0 0 14px ${accent}88` }}>
                 {selected.name}
               </h3>
               <span
@@ -208,7 +206,7 @@ export default function CharacterSelect() {
               <span className="truncate">{selected.specialName}</span>
             </div>
 
-            <div className="mt-2 space-y-1.5">
+            <div className="mt-1.5 grid grid-cols-3 gap-x-3 gap-y-1 max-w-xl">
               <StatBar label="POW" value={selected.stats.power} accent={accent} />
               <StatBar label="SPD" value={selected.stats.speed} accent={accent} />
               <StatBar label="TEC" value={selected.stats.technique} accent={accent} />
@@ -220,7 +218,7 @@ export default function CharacterSelect() {
             whileTap={{ scale: 0.96 }}
             animate={{ boxShadow: ['0 0 0px rgba(239,68,68,0)', '0 0 22px rgba(239,68,68,0.55)', '0 0 0px rgba(239,68,68,0)'] }}
             transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
-            className="shrink-0 mt-2 w-full py-2.5 sm:py-3 bg-gradient-to-r from-red-600 to-orange-500 rounded-lg
+            className="shrink-0 self-stretch px-4 sm:px-6 bg-gradient-to-r from-red-600 to-orange-500 rounded-lg
                      font-bold text-sm sm:text-lg flex items-center justify-center gap-2"
           >
             <Swords size={18} />
@@ -228,15 +226,26 @@ export default function CharacterSelect() {
           </motion.button>
         </motion.div>
 
-        {/* Two scrolling roster rows */}
-        <div ref={rosterRef} className="flex-1 min-h-0 flex flex-col" style={{ gap: GAP }}>
-          {rows.map((row, i) => (
-            <div key={i} className="flex-1 min-h-0 flex items-center overflow-x-auto overflow-y-hidden no-scrollbar" style={{ gap: GAP }}>
-              {row.map((character) => (
+        {/* Roster — two rows that scroll together as one unit */}
+        <div ref={rosterRef} className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden no-scrollbar">
+          {tile > 0 && (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateRows: `repeat(2, ${tile}px)`,
+                gridAutoFlow: 'column',
+                gridAutoColumns: `${tile}px`,
+                gap: GAP,
+                justifyContent: 'start',
+                alignContent: 'center',
+                height: '100%',
+              }}
+            >
+              {characters.map((character) => (
                 <Tile key={character.id} character={character} />
               ))}
             </div>
-          ))}
+          )}
         </div>
       </div>
     </div>
