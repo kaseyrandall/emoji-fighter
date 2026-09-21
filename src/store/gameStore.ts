@@ -15,6 +15,13 @@ export const GAUNTLET_SIZE = Math.min(6, characters.length - 1);
 const POS_MIN = -10;
 const POS_MAX = 92;
 
+// Player horizontal physics — velocity with acceleration and friction, so the
+// fighter has weight and momentum instead of teleporting in fixed steps.
+const MOVE_TICK_MS = 16;
+const PLAYER_MAX_SPEED = 1.05; // % of arena per tick at full input
+const PLAYER_ACCEL = 0.16; // how fast velocity eases toward the target
+const PLAYER_FRICTION = 0.8; // velocity retained per tick when no input
+
 // AI timing state for the current round (reset when a round's AI loop starts).
 let aiLastAttackAt = 0;
 let aiEnteredRangeAt = 0;
@@ -77,6 +84,8 @@ const freshBout = () => ({
   currentMove: null,
   hitEvent: null,
   playerFacing: 'right' as const,
+  moveDir: 0,
+  playerVel: 0,
 });
 
 interface GameStore extends GameState {
@@ -86,6 +95,9 @@ interface GameStore extends GameState {
   selectOpponent: () => void;
   startGauntlet: (character: Character) => void;
   advanceGauntlet: () => void;
+  moveDir: number;
+  playerVel: number;
+  setMoveDir: (dir: number) => void;
   performMove: (move: Move) => void;
   endRound: (winner: 'player' | 'opponent') => void;
   resetGame: () => void;
@@ -100,6 +112,7 @@ interface GameStore extends GameState {
   startCountdown: () => void;
   opponentAttack: () => void;
   opponentAI: () => void;
+  playerPhysics: () => void;
 }
 
 export const useGameStore = create<GameStore>((set) => ({
@@ -128,6 +141,9 @@ export const useGameStore = create<GameStore>((set) => ({
   isJumping: false,
   hitEvent: null,
   playerFacing: 'right',
+  moveDir: 0,
+  playerVel: 0,
+  setMoveDir: (dir) => set({ moveDir: Math.max(-1, Math.min(1, dir)) }),
   setAttacking: (value) => set({ isAttacking: value }),
 
   selectCharacter: (character) => set({ selectedCharacter: character }),
@@ -182,19 +198,14 @@ export const useGameStore = create<GameStore>((set) => ({
     const state = useGameStore.getState();
     if (state.gameStatus !== 'playing') return;
 
-    // Handle movement
+    // Horizontal movement is velocity-based now (see the physics loop); the
+    // 'left' / 'right' moves just set the input direction.
     if (move === 'left') {
-      set(state => ({
-        playerPosition: Math.max(POS_MIN, state.playerPosition - 12),
-        playerFacing: 'left',
-      }));
+      useGameStore.getState().setMoveDir(-1);
       return;
     }
     if (move === 'right') {
-      set(state => ({
-        playerPosition: Math.min(POS_MAX, state.playerPosition + 12),
-        playerFacing: 'right',
-      }));
+      useGameStore.getState().setMoveDir(1);
       return;
     }
     if (move === 'jump' && !state.isJumping) {
@@ -335,6 +346,35 @@ export const useGameStore = create<GameStore>((set) => ({
     return () => clearInterval(aiInterval);
   },
 
+  // Integrate the player's horizontal velocity each tick: ease toward the input
+  // direction, coast with friction when released, and stop dead at the walls.
+  playerPhysics: () => {
+    const loop = setInterval(() => {
+      const s = useGameStore.getState();
+      if (s.gameStatus !== 'playing') {
+        clearInterval(loop);
+        return;
+      }
+
+      const target = s.moveDir * PLAYER_MAX_SPEED;
+      let vel = s.moveDir !== 0
+        ? s.playerVel + (target - s.playerVel) * PLAYER_ACCEL
+        : s.playerVel * PLAYER_FRICTION;
+      if (Math.abs(vel) < 0.02) vel = 0;
+
+      let pos = s.playerPosition + vel;
+      if (pos <= POS_MIN) { pos = POS_MIN; vel = 0; }
+      if (pos >= POS_MAX) { pos = POS_MAX; vel = 0; }
+
+      if (pos === s.playerPosition && vel === 0 && s.playerVel === 0) return;
+
+      const patch: Partial<GameState> & { playerVel: number } = { playerPosition: pos, playerVel: vel };
+      if (s.moveDir < -0.05) patch.playerFacing = 'left';
+      else if (s.moveDir > 0.05) patch.playerFacing = 'right';
+      set(patch);
+    }, MOVE_TICK_MS);
+  },
+
   startCountdown: () => {
     set({
       gameStatus: 'ready',
@@ -369,8 +409,9 @@ export const useGameStore = create<GameStore>((set) => ({
           gameStatus: 'playing',
           countdown: -1
         });
-        // Start opponent AI when round begins
+        // Start opponent AI and the player physics loop when the round begins.
         useGameStore.getState().opponentAI();
+        useGameStore.getState().playerPhysics();
         runTimer();
         }, 1000);
       }
@@ -408,7 +449,9 @@ export const useGameStore = create<GameStore>((set) => ({
         isAttacking: false,
         isOpponentAttacking: false,
         currentMove: null,
-        playerFacing: 'right'
+        playerFacing: 'right',
+        moveDir: 0,
+        playerVel: 0
       });
     } else {
       // Reset for next round
@@ -429,7 +472,9 @@ export const useGameStore = create<GameStore>((set) => ({
         isAttacking: false,
         isOpponentAttacking: false,
         currentMove: null,
-        playerFacing: 'right'
+        playerFacing: 'right',
+        moveDir: 0,
+        playerVel: 0
       });
       useGameStore.getState().startCountdown();
     }
@@ -457,7 +502,9 @@ export const useGameStore = create<GameStore>((set) => ({
       isAttacking: false,
       isOpponentAttacking: false,
       currentMove: null,
-      playerFacing: 'right'
+      playerFacing: 'right',
+      moveDir: 0,
+      playerVel: 0
     });
   },
 

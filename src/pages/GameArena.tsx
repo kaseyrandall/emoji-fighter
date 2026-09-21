@@ -61,7 +61,8 @@ export default function GameArena() {
     gauntletStage,
     gauntletOpponents,
     advanceGauntlet,
-    playerFacing
+    playerFacing,
+    setMoveDir
   } = useGameStore();
 
   const stage = stages.find(s => s.id === currentStage);
@@ -194,9 +195,9 @@ export default function GameArena() {
   }, [gameStatus]);
 
   useEffect(() => {
-    const handleKeyPress = (e: KeyboardEvent) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (gameStatus !== 'playing') return;
-      
+
       switch (e.key.toLowerCase()) {
         case 'j':
           performMove('punch');
@@ -211,10 +212,10 @@ export default function GameArena() {
           playMoveSound('special');
           break;
         case 'a':
-          performMove('left');
+          setMoveDir(-1);
           break;
         case 'd':
-          performMove('right');
+          setMoveDir(1);
           break;
         case 'w':
           performMove('jump');
@@ -225,8 +226,17 @@ export default function GameArena() {
       }
     };
 
-    window.addEventListener('keydown', handleKeyPress);
-    return () => window.removeEventListener('keydown', handleKeyPress);
+    const handleKeyUp = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase();
+      if (k === 'a' || k === 'd') setMoveDir(0);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
   }, [gameStatus]);
 
   const playMoveSound = (move: string) => {
@@ -261,7 +271,7 @@ export default function GameArena() {
   if (!selectedCharacter || !opponent) return null;
 
   return (
-    <div className="relative min-h-screen flex flex-col items-center justify-between overflow-hidden">
+    <div className="relative h-[100dvh] flex flex-col items-center justify-between overflow-hidden">
       {/* Stage Background */}
       <div 
         className="absolute inset-0 bg-black bg-cover bg-center"
@@ -372,7 +382,7 @@ export default function GameArena() {
             style={{
               left: `${playerPosition}%`,
               bottom: `${playerY}px`,
-              transition: 'left 0.2s ease-out, bottom 0.3s ease-out',
+              transition: 'bottom 0.08s linear',
               filter: flash === 'player'
                 ? 'brightness(1.9) drop-shadow(0 0 22px rgba(255,40,40,0.95))'
                 : 'drop-shadow(0 0 15px rgba(255,255,255,0.5))'
@@ -563,11 +573,12 @@ export default function GameArena() {
         </div>
       )}
 
-      {/* Controls — only while actively playing, so they never sit under the overlay/footer */}
-      {gameStatus === 'playing' && (
+      {/* Controls — kept mounted across the round countdown too, so a joystick
+          held through a KO doesn't lose the still-down finger on the next round. */}
+      {(gameStatus === 'ready' || gameStatus === 'playing') && (
         <div className="game-controls lg:hidden">
           {/* Movement joystick */}
-          <Joystick onMove={performMove} size={116} />
+          <Joystick onMoveDir={setMoveDir} onJump={() => performMove('jump')} size={116} />
 
           {/* Attack Controls */}
           <div className="flex gap-4">

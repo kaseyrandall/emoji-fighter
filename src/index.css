@@ -3,10 +3,16 @@
 @tailwind utilities;
 
 @layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
   body {
     @apply antialiased font-arcade;
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
   }
 }
 
