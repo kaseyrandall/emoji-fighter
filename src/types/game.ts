@@ -22,8 +22,11 @@ export interface GameState {
   opponent: Character | null;
   playerHealth: number;
   opponentHealth: number;
-  gameStatus: 'ready' | 'playing' | 'paused' | 'won' | 'lost';
+  gameStatus: 'ready' | 'playing' | 'paused' | 'won' | 'lost' | 'champion';
   round: number;
+  // Gauntlet ladder: ordered opponents the player faces, easiest first.
+  gauntletOpponents: Character[];
+  gauntletStage: number;
   playerPosition: number;
   playerY: number;
   opponentPosition: number;

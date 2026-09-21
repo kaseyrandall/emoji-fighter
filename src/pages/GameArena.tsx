@@ -4,7 +4,7 @@ import ReactGA from 'react-ga4';
 import { motion, AnimatePresence, useAnimationControls } from 'framer-motion';
 import UIFx from 'uifx';
 import { useGameStore } from '../store/gameStore';
-import { Pause, Play, RotateCcw } from 'lucide-react';
+import { Pause, Play, RotateCcw, Swords } from 'lucide-react';
 import { stages } from '../data/stages';
 
 interface FloatingHit {
@@ -54,18 +54,27 @@ export default function GameArena() {
     playerY,
     opponentPosition,
     isOpponentAttacking,
-    hitEvent
+    hitEvent,
+    gauntletStage,
+    gauntletOpponents,
+    advanceGauntlet
   } = useGameStore();
 
   const stage = stages.find(s => s.id === currentStage);
+  const nextOpponent = gauntletOpponents[gauntletStage + 1];
 
   // --- Hit VFX: screen shake, red flash, floating damage numbers ---
   const arenaControls = useAnimationControls();
   const [floatingHits, setFloatingHits] = useState<FloatingHit[]>([]);
   const [flash, setFlash] = useState<'player' | 'opponent' | null>(null);
+  const lastHitSeq = useRef<number>(0);
 
   useEffect(() => {
     if (!hitEvent) return;
+    // Process each hit exactly once (StrictMode double-invokes effects in dev,
+    // which would otherwise re-add an already-exiting number with the same key).
+    if (hitEvent.seq === lastHitSeq.current) return;
+    lastHitSeq.current = hitEvent.seq;
     const special = hitEvent.move === 'special';
 
     // Screen shake, bigger on specials
@@ -152,10 +161,10 @@ export default function GameArena() {
   }, []);
 
   useEffect(() => {
-    if (gameStatus === 'won') {
+    if (gameStatus === 'won' || gameStatus === 'champion') {
       ReactGA.event({
         category: 'Game',
-        action: 'Game Won',
+        action: gameStatus === 'champion' ? 'Gauntlet Cleared' : 'Stage Cleared',
         label: `${selectedCharacter?.name} vs ${opponent?.name}`
       });
       winSound.current?.play();
@@ -299,7 +308,7 @@ export default function GameArena() {
 
       {/* Arena */}
       <div className="relative flex-1 w-full flex flex-col justify-end pb-8 lg:pb-0">
-        {/* Timer and Round */}
+        {/* Timer, Round, and Gauntlet progress */}
         <div className="absolute top-4 left-1/2 -translate-x-1/2 flex flex-col items-center z-10 drop-shadow-[0_0_10px_rgba(255,0,0,0.5)]">
           <div className="text-lg text-yellow-400">
             {timer}
@@ -307,6 +316,11 @@ export default function GameArena() {
           <div className="text-md text-white">
             Round {round}
           </div>
+          {gauntletOpponents.length > 0 && (
+            <div className="text-[10px] lg:text-xs text-orange-300 mt-0.5">
+              Fight {gauntletStage + 1} / {gauntletOpponents.length}
+            </div>
+          )}
         </div>
         
         {/* Floor */}
@@ -374,7 +388,7 @@ export default function GameArena() {
       </div>
 
       {/* Game Status Overlay */}
-      {(gameStatus === 'ready' || gameStatus === 'paused' || gameStatus === 'won' || gameStatus === 'lost') && (
+      {(gameStatus === 'ready' || gameStatus === 'paused' || gameStatus === 'won' || gameStatus === 'lost' || gameStatus === 'champion') && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-10">
           <div className="text-center relative">
             {gameStatus === 'ready' && countdown > 0 && (
@@ -400,27 +414,35 @@ export default function GameArena() {
             {gameStatus === 'paused' && (
               <h2 className="text-4xl mb-4 text-white">PAUSED</h2>
             )}
-            {(gameStatus === 'won' || gameStatus === 'lost') && (
-              <h2 className="flex flex-col text-4xl mb-4">
+            {(gameStatus === 'won' || gameStatus === 'lost' || gameStatus === 'champion') && (
+              <h2 className="flex flex-col mb-4">
                 <motion.span
                   initial={{ opacity: 0, y: -20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className={`text-6xl font-bold ${gameStatus === 'won' ? 'text-yellow-400' : 'text-red-500'}`}
+                  className={`text-4xl lg:text-6xl font-bold ${
+                    gameStatus === 'lost' ? 'text-red-500' : 'text-yellow-400'
+                  }`}
                 >
-                  {gameStatus === 'won' ? 'YOU WIN!' : 'YOU LOSE'}
+                  {gameStatus === 'champion' ? 'CHAMPION!' : gameStatus === 'won' ? 'STAGE CLEARED' : 'DEFEATED'}
                 </motion.span>
                 <motion.span
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  transition={{ delay: 0.5 }}
-                  className="text-2xl mt-4 text-gray-300"
+                  transition={{ delay: 0.4 }}
+                  className="text-base lg:text-2xl mt-2 lg:mt-4 text-gray-300"
                 >
-                  {playerWins === 2 || opponentWins === 2 ? 'Match Complete!' : 'Get Ready for Next Round'}
+                  {gameStatus === 'champion'
+                    ? `You conquered all ${gauntletOpponents.length} fights!`
+                    : gameStatus === 'won'
+                    ? nextOpponent
+                      ? `Next up: ${nextOpponent.name} ${nextOpponent.emoji}`
+                      : 'On to the next!'
+                    : `You reached Fight ${gauntletStage + 1} / ${gauntletOpponents.length}`}
                 </motion.span>
               </h2>
             )}
-            <div className="flex flex-col gap-4 justify-center">
-              {gameStatus === 'paused' ? (
+            <div className="flex flex-col gap-3 lg:gap-4 justify-center">
+              {gameStatus === 'paused' && (
                 <>
                   <button
                     onClick={togglePause}
@@ -440,20 +462,30 @@ export default function GameArena() {
                     Quit
                   </button>
                 </>
-              ) : ((gameStatus === 'won' || gameStatus === 'lost') && (playerWins === 2 || opponentWins === 2)) && (
+              )}
+              {gameStatus === 'won' && (
+                <button
+                  onClick={() => advanceGauntlet()}
+                  className="px-6 py-3 bg-gradient-to-r from-red-600 to-orange-500 rounded-lg font-bold
+                           flex justify-center items-center gap-2 active:brightness-110"
+                >
+                  <Swords size={20} />
+                  Next Fight
+                </button>
+              )}
+              {(gameStatus === 'lost' || gameStatus === 'champion') && (
                 <button
                   onClick={() => {
                     resetGame();
                     navigate('/select');
                   }}
-                  className="px-6 py-3 bg-yellow-500 text-black rounded-lg flex justify-center items-center gap-2"
+                  className="px-6 py-3 bg-yellow-500 text-black rounded-lg font-bold flex justify-center items-center gap-2"
                 >
                   <RotateCcw size={20} />
-                  Play Again
+                  {gameStatus === 'champion' ? 'Play Again' : 'Try Again'}
                 </button>
               )}
-             
-            </div>            
+            </div>
           </div>
            <footer className="footer">
         Copyright Edge Kase Inc 2025. All Rights Reserved.
