@@ -63,28 +63,18 @@ export default function GameArena() {
     advanceGauntlet,
     playerFacing,
     setMoveDir,
-    performSpecial
+    performSpecial,
+    specialMeter
   } = useGameStore();
 
-  // Charge-up special: hold to build charge (up to CHARGE_MS = 2x), release to fire.
-  const CHARGE_MS = 900;
-  const chargeStart = useRef<number>(0);
-  const chargingRef = useRef(false);
-  const [charging, setCharging] = useState(false);
-
-  const beginCharge = () => {
-    if (useGameStore.getState().gameStatus !== 'playing' || chargingRef.current) return;
-    chargingRef.current = true;
-    chargeStart.current = Date.now();
-    setCharging(true);
-  };
-  const releaseSpecial = () => {
-    if (!chargingRef.current) return;
-    chargingRef.current = false;
-    const ratio = Math.max(0, Math.min(1, (Date.now() - chargeStart.current) / CHARGE_MS));
-    setCharging(false);
-    performSpecial(ratio);
-    playMoveSound('special');
+  // Super meter: charged by landing punches/kicks; the special fires only when full.
+  const specialReady = specialMeter >= 100;
+  const useSpecial = () => {
+    const s = useGameStore.getState();
+    if (s.gameStatus === 'playing' && s.specialMeter >= 100) {
+      performSpecial();
+      playMoveSound('special');
+    }
   };
 
   const stage = stages.find(s => s.id === currentStage);
@@ -230,7 +220,7 @@ export default function GameArena() {
           playMoveSound('kick');
           break;
         case 'l':
-          beginCharge();
+          useSpecial();
           break;
         case 'a':
           setMoveDir(-1);
@@ -250,7 +240,6 @@ export default function GameArena() {
     const handleKeyUp = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
       if (k === 'a' || k === 'd') setMoveDir(0);
-      if (k === 'l') releaseSpecial();
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -305,53 +294,66 @@ export default function GameArena() {
       <div className={`absolute inset-0 ${stage?.ambientLight} mix-blend-overlay`} />
       
       {/* Health Bars */}
-      <div className="relative lg:w-full w-[80%] max-w-4xl flex justify-between gap-4 text-lg pt-4 z-10">
+      <div className="relative w-full max-w-4xl flex justify-between items-start gap-8 sm:gap-10 px-3 sm:px-4 pt-2 z-10">
         {/* Pause Button — only while playing; resume happens via the overlay,
             so a stray double-tap can't immediately toggle back to playing. */}
         {gameStatus === 'playing' && (
           <button
             onClick={pauseGame}
-            className="fixed top-4 left-4 z-20 w-10 h-10 bg-gray-700/50 rounded-lg hover:bg-gray-600/50
+            className="fixed top-2 left-2 z-20 w-8 h-8 bg-gray-700/50 rounded-lg hover:bg-gray-600/50
                      flex items-center justify-center backdrop-blur-sm"
           >
-            <Pause size={20} />
+            <Pause size={16} />
           </button>
         )}
 
-        <div className="flex-1">
-          <div className="text-yellow-400 font-arcade text-sm mb-2">
-            Wins: {playerWins}
+        <div className="flex-1 min-w-0 pl-9 sm:pl-10">
+          <div className="flex justify-between items-center gap-1 mb-0.5">
+            <div className="flex items-center gap-1 min-w-0">
+              <div className="flex gap-0.5 shrink-0">
+                {[0, 1].map((i) => (
+                  <span key={i} className="w-1.5 h-1.5 rounded-full" style={{ background: i < playerWins ? '#fbbf24' : 'rgba(255,255,255,0.25)' }} />
+                ))}
+              </div>
+              <span className="truncate text-[10px] sm:text-xs">{selectedCharacter.name}</span>
+            </div>
+            <span className="shrink-0 text-[10px] sm:text-xs text-gray-300">{playerHealth}%</span>
           </div>
-          <div className="flex justify-between mb-2 text-sm">
-            <span>{selectedCharacter.name}</span>
-            <span>{playerHealth}%</span>
+          <div className="h-2.5 sm:h-3 bg-gray-700 rounded-full overflow-hidden">
+            <div className="h-full bg-green-500 transition-all duration-300" style={{ width: `${playerHealth}%` }} />
           </div>
-          <div className="h-4 bg-gray-700 rounded-full overflow-hidden">
+          {/* super meter */}
+          <div className="mt-1 h-1.5 bg-gray-700/70 rounded-full overflow-hidden">
             <div
-              className="h-full bg-green-500 transition-all duration-300"
-              style={{ width: `${playerHealth}%` }}
+              className="h-full transition-all duration-200"
+              style={{
+                width: `${specialMeter}%`,
+                background: specialReady ? '#e9d5ff' : 'linear-gradient(90deg,#7c3aed,#c084fc)',
+                boxShadow: specialReady ? '0 0 8px rgba(216,180,254,0.9)' : undefined,
+              }}
             />
           </div>
+          <div className="text-[8px] text-purple-300/80 mt-0.5">{specialReady ? '✨ SPECIAL READY' : 'SPECIAL'}</div>
         </div>
-        
-        <div className="font-arcade text-4xl text-red-500 flex items-center 
-                    drop-shadow-[0_0_10px_rgba(255,0,0,0.5)]">
+
+        <div className="font-arcade text-xl sm:text-3xl text-red-500 self-center drop-shadow-[0_0_10px_rgba(255,0,0,0.5)]">
           VS
         </div>
-        
-        <div className="flex-1">
-          <div className="text-yellow-400 font-arcade text-sm mb-2 text-right">
-            Wins: {opponentWins}
+
+        <div className="flex-1 min-w-0">
+          <div className="flex justify-between items-center gap-1 mb-0.5">
+            <span className="shrink-0 text-[10px] sm:text-xs text-gray-300">{opponentHealth}%</span>
+            <div className="flex items-center gap-1 min-w-0 justify-end">
+              <span className="truncate text-[10px] sm:text-xs text-right">{opponent.name}</span>
+              <div className="flex gap-0.5 shrink-0">
+                {[0, 1].map((i) => (
+                  <span key={i} className="w-1.5 h-1.5 rounded-full" style={{ background: i < opponentWins ? '#fbbf24' : 'rgba(255,255,255,0.25)' }} />
+                ))}
+              </div>
+            </div>
           </div>
-          <div className="flex justify-between mb-2 text-sm">
-            <span>{opponent.name}</span>
-            <span>{opponentHealth}%</span>
-          </div>
-          <div className="h-4 bg-gray-700 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-green-500 transition-all duration-300"
-              style={{ width: `${opponentHealth}%` }}
-            />
+          <div className="h-2.5 sm:h-3 bg-gray-700 rounded-full overflow-hidden">
+            <div className="h-full bg-green-500 transition-all duration-300" style={{ width: `${opponentHealth}%` }} />
           </div>
         </div>
       </div>
@@ -400,15 +402,15 @@ export default function GameArena() {
           </AnimatePresence>
 
           <motion.div
-            className="text-[8rem] lg:text-[12rem] absolute"
+            className="text-[5.5rem] sm:text-[6.5rem] lg:text-[9rem] absolute"
             style={{
               left: `${playerPosition}%`,
               bottom: `${playerY}px`,
               transition: 'bottom 0.08s linear',
               filter: flash === 'player'
                 ? 'brightness(1.9) drop-shadow(0 0 22px rgba(255,40,40,0.95))'
-                : charging
-                ? 'brightness(1.25) drop-shadow(0 0 28px rgba(216,180,254,0.95))'
+                : specialReady
+                ? 'drop-shadow(0 0 22px rgba(216,180,254,0.9))'
                 : 'drop-shadow(0 0 15px rgba(255,255,255,0.5))'
             }}
             animate={getPlayerAnimation()}
@@ -420,7 +422,7 @@ export default function GameArena() {
             {selectedCharacter.emoji}
           </motion.div>
           <motion.div
-            className="text-[8rem] lg:text-[12rem] absolute"
+            className="text-[5.5rem] sm:text-[6.5rem] lg:text-[9rem] absolute"
             style={{
               left: `${opponentPosition}%`,
               transition: 'left 0.2s ease-out',
@@ -615,21 +617,25 @@ export default function GameArena() {
               className="attack-button kick"
             >🦶</button>
             <button
-              onPointerDown={(e) => { e.preventDefault(); beginCharge(); }}
-              onPointerUp={releaseSpecial}
-              onPointerLeave={releaseSpecial}
-              onPointerCancel={releaseSpecial}
+              onClick={useSpecial}
               className="attack-button special relative overflow-hidden"
+              style={{
+                opacity: specialReady ? 1 : 0.55,
+                boxShadow: specialReady ? '0 0 16px rgba(216,180,254,0.9)' : undefined,
+              }}
             >
-              {/* charge fill grows while held */}
+              {/* super meter fill (charged by landing attacks) */}
               <span
-                className="absolute inset-0 rounded-full bg-purple-300/70 origin-bottom pointer-events-none"
-                style={{
-                  transform: 'scaleY(0)',
-                  animation: charging ? `chargeGrow ${CHARGE_MS}ms linear forwards` : 'none',
-                }}
+                className="absolute inset-x-0 bottom-0 bg-purple-300/70 pointer-events-none transition-[height] duration-200"
+                style={{ height: `${specialMeter}%` }}
               />
-              <span className="relative">✨</span>
+              <motion.span
+                className="relative"
+                animate={specialReady ? { scale: [1, 1.18, 1] } : { scale: 1 }}
+                transition={specialReady ? { duration: 0.9, repeat: Infinity } : { duration: 0.2 }}
+              >
+                ✨
+              </motion.span>
             </button>
           </div>
         </div>

@@ -31,6 +31,12 @@ let aiEnteredRangeAt = 0;
 const PLAYER_ATTACK_COOLDOWN = 340;
 let playerLastAttackAt = 0;
 
+// Super meter: landing punches/kicks charges it; the special can only fire when
+// it's full, then it's spent. A full-meter special hits harder than a raw one.
+const SPECIAL_METER_MAX = 100;
+const SPECIAL_GAIN = 20; // meter gained per landed punch/kick
+const SPECIAL_SUPER_MULT = 1.4;
+
 // Difficulty ramps with the gauntlet stage: early fights are slow and gentle,
 // later fights are fast, aggressive, and hit harder.
 interface Difficulty {
@@ -86,6 +92,7 @@ const freshBout = () => ({
   playerFacing: 'right' as const,
   moveDir: 0,
   playerVel: 0,
+  specialMeter: 0,
 });
 
 interface GameStore extends GameState {
@@ -98,8 +105,9 @@ interface GameStore extends GameState {
   moveDir: number;
   playerVel: number;
   setMoveDir: (dir: number) => void;
+  specialMeter: number;
   performMove: (move: Move) => void;
-  performSpecial: (chargeRatio: number) => void;
+  performSpecial: () => void;
   endRound: (winner: 'player' | 'opponent') => void;
   resetGame: () => void;
   togglePause: () => void;
@@ -144,6 +152,7 @@ export const useGameStore = create<GameStore>((set) => ({
   playerFacing: 'right',
   moveDir: 0,
   playerVel: 0,
+  specialMeter: 0,
   setMoveDir: (dir) => set({ moveDir: Math.max(-1, Math.min(1, dir)) }),
   setAttacking: (value) => set({ isAttacking: value }),
 
@@ -253,41 +262,43 @@ export const useGameStore = create<GameStore>((set) => ({
     const hitEvent = { target: 'opponent' as const, amount: damage, move, seq: nextHit() };
 
     // Knock the opponent back a touch on hit.
-    const knockback = move === 'special' ? 8 : 4;
-    const knockedPosition = Math.min(POS_MAX, state.opponentPosition + knockback);
+    const knockedPosition = Math.min(POS_MAX, state.opponentPosition + 4);
+    // Landing an attack charges the super meter.
+    const specialMeter = Math.min(SPECIAL_METER_MAX, state.specialMeter + SPECIAL_GAIN);
 
     if (newOpponentHealth <= 0) {
-      set({ opponentHealth: 0, opponentPosition: knockedPosition, hitEvent });
+      set({ opponentHealth: 0, opponentPosition: knockedPosition, hitEvent, specialMeter });
       useGameStore.getState().endRound('player');
       return;
     }
 
-    set({ opponentHealth: newOpponentHealth, opponentPosition: knockedPosition, hitEvent });
+    set({ opponentHealth: newOpponentHealth, opponentPosition: knockedPosition, hitEvent, specialMeter });
   },
 
-  // The special can be charged (held): chargeRatio 0..1 scales damage up to 2x
-  // and adds knockback, so timing a full charge is rewarded.
-  performSpecial: (chargeRatio) => {
+  // The special is a super: usable only when the meter is full (charged by
+  // landing attacks), and it's spent on use.
+  performSpecial: () => {
     const state = useGameStore.getState();
     if (state.gameStatus !== 'playing') return;
+    if (state.specialMeter < SPECIAL_METER_MAX) return; // not charged yet
 
     const now = Date.now();
     if (now - playerLastAttackAt < PLAYER_ATTACK_COOLDOWN) return;
     playerLastAttackAt = now;
 
-    const ratio = Math.max(0, Math.min(1, chargeRatio));
-    set({ isAttacking: true, currentMove: 'special' });
+    // Spend the meter on activation.
+    set({ isAttacking: true, currentMove: 'special', specialMeter: 0 });
     setTimeout(() => set({ isAttacking: false, currentMove: null }), 600);
 
     const distance = Math.abs(state.playerPosition - state.opponentPosition);
     if (distance > 25) return;
 
     const base = state.selectedCharacter?.moves.special || 0;
-    const damage = Math.round(base * (1 + ratio));
+    const damage = Math.round(base * SPECIAL_SUPER_MULT);
     const newOpponentHealth = Math.max(0, state.opponentHealth - damage);
     const hitEvent = { target: 'opponent' as const, amount: damage, move: 'special' as const, seq: nextHit() };
 
-    const knockedPosition = Math.min(POS_MAX, state.opponentPosition + 8 + ratio * 10);
+    const knockedPosition = Math.min(POS_MAX, state.opponentPosition + 14);
 
     if (newOpponentHealth <= 0) {
       set({ opponentHealth: 0, opponentPosition: knockedPosition, hitEvent });
@@ -484,7 +495,8 @@ export const useGameStore = create<GameStore>((set) => ({
         currentMove: null,
         playerFacing: 'right',
         moveDir: 0,
-        playerVel: 0
+        playerVel: 0,
+        specialMeter: 0
       });
     } else {
       // Reset for next round
@@ -507,7 +519,8 @@ export const useGameStore = create<GameStore>((set) => ({
         currentMove: null,
         playerFacing: 'right',
         moveDir: 0,
-        playerVel: 0
+        playerVel: 0,
+        specialMeter: 0
       });
       useGameStore.getState().startCountdown();
     }
@@ -537,7 +550,8 @@ export const useGameStore = create<GameStore>((set) => ({
       currentMove: null,
       playerFacing: 'right',
       moveDir: 0,
-      playerVel: 0
+      playerVel: 0,
+      specialMeter: 0
     });
   },
 
