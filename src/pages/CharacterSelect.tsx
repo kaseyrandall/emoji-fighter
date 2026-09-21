@@ -82,9 +82,9 @@ export default function CharacterSelect() {
       </div>
 
       <div className="flex-1 flex gap-3 min-h-0">
-        {/* Portrait grid */}
-        <div className="flex-1 overflow-y-auto">
-          <div className="grid grid-cols-4 sm:grid-cols-5 gap-1.5 lg:gap-2">
+        {/* Portrait grid — fills the available space, rows share the height */}
+        <div className="flex-1 min-h-0">
+          <div className="grid grid-cols-4 sm:grid-cols-5 auto-rows-fr gap-1.5 lg:gap-2 h-full">
             {characters.map((character) => {
               const isSelected = character.id === selectedId;
               const a = accentOf(character.id);
@@ -94,7 +94,7 @@ export default function CharacterSelect() {
                   onClick={() => handleSelect(character.id)}
                   whileHover={{ scale: 1.04 }}
                   whileTap={{ scale: 0.95 }}
-                  className="relative aspect-square rounded-xl border-2 flex flex-col items-center justify-center gap-0.5 p-1
+                  className="relative min-h-0 rounded-xl border-2 flex flex-col items-center justify-center gap-0.5 p-1
                            bg-gray-800/70 hover:bg-gray-700/70 transition-colors"
                   style={{
                     borderColor: isSelected ? a : 'rgba(75,85,99,0.6)',
