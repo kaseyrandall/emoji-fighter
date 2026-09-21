@@ -42,6 +42,11 @@ const difficultyForStage = (stage: number): Difficulty => ({
   reactionMs: Math.max(0, 500 - stage * 90),
 });
 
+// A player-chosen base difficulty shifts the whole curve up or down.
+export type DifficultyLevel = 'Easy' | 'Normal' | 'Hard';
+export const DIFFICULTY_LEVELS: DifficultyLevel[] = ['Easy', 'Normal', 'Hard'];
+const DIFF_OFFSET: Record<DifficultyLevel, number> = { Easy: -1.5, Normal: 0, Hard: 1.75 };
+
 const shuffle = <T,>(arr: T[]): T[] => {
   const copy = [...arr];
   for (let i = copy.length - 1; i > 0; i--) {
@@ -75,6 +80,8 @@ const freshBout = () => ({
 });
 
 interface GameStore extends GameState {
+  difficulty: DifficultyLevel;
+  setDifficulty: (level: DifficultyLevel) => void;
   selectCharacter: (character: Character) => void;
   selectOpponent: () => void;
   startGauntlet: (character: Character) => void;
@@ -98,6 +105,8 @@ interface GameStore extends GameState {
 export const useGameStore = create<GameStore>((set) => ({
   selectedCharacter: null,
   opponent: null,
+  difficulty: 'Normal',
+  setDifficulty: (level) => set({ difficulty: level }),
   playerHealth: 100,
   opponentHealth: 100,
   gameStatus: 'ready',
@@ -258,7 +267,7 @@ export const useGameStore = create<GameStore>((set) => ({
     const distance = Math.abs(state.playerPosition - state.opponentPosition);
     if (distance > 25) return; // No damage if too far apart
 
-    const { damageMult } = difficultyForStage(state.gauntletStage);
+    const { damageMult } = difficultyForStage(state.gauntletStage + DIFF_OFFSET[state.difficulty]);
     const baseDamage = state.opponent?.moves[randomMove] || 0;
     const damage = Math.round(baseDamage * damageMult);
     const newPlayerHealth = Math.max(0, state.playerHealth - damage);
@@ -290,7 +299,7 @@ export const useGameStore = create<GameStore>((set) => ({
         return;
       }
 
-      const diff = difficultyForStage(state.gauntletStage);
+      const diff = difficultyForStage(state.gauntletStage + DIFF_OFFSET[state.difficulty]);
       const distance = Math.abs(state.playerPosition - state.opponentPosition);
 
       // Move towards player if too far

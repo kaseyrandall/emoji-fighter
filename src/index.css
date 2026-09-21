@@ -10,6 +10,16 @@
   }
 }
 
+@layer utilities {
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @layer components {
   .footer {
     @apply fixed bottom-0 w-full py-2 px-4 text-center text-xs text-gray-400 bg-black/50 backdrop-blur-sm z-50;
