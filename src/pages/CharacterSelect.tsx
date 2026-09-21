@@ -4,8 +4,8 @@ import ReactGA from 'react-ga4';
 import { motion } from 'framer-motion';
 import { characters } from '../data/characters';
 import { stages } from '../data/stages';
-import { useGameStore, GAUNTLET_SIZE, DIFFICULTY_LEVELS } from '../store/gameStore';
-import { Swords, Sparkles, ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useGameStore, GAUNTLET_SIZE } from '../store/gameStore';
+import { Swords, Sparkles, ArrowLeft, ChevronRight } from 'lucide-react';
 import { Character } from '../types/game';
 
 // Signature colour per fighter — drives glows, stat bars and the backdrop tint.
@@ -56,8 +56,6 @@ const StatBar = ({ label, value, accent }: { label: string; value: number; accen
 export default function CharacterSelect() {
   const navigate = useNavigate();
   const startGauntlet = useGameStore((s) => s.startGauntlet);
-  const difficulty = useGameStore((s) => s.difficulty);
-  const setDifficulty = useGameStore((s) => s.setDifficulty);
   const [selectedId, setSelectedId] = React.useState<string>(characters[0].id);
 
   const selected = characters.find((c) => c.id === selectedId) || characters[0];
@@ -74,19 +72,25 @@ export default function CharacterSelect() {
   const GAP = 8;
   const tile = Math.min(Math.max(0, (rosterSize.h - GAP) / 2), 118);
 
+  // Track scroll position so the edge fades only show when there's more to see.
+  const [edges, setEdges] = React.useState({ left: false, right: false });
+  const updateEdges = React.useCallback(() => {
+    const el = rosterRef.current;
+    if (!el) return;
+    setEdges({
+      left: el.scrollLeft > 4,
+      right: el.scrollLeft + el.clientWidth < el.scrollWidth - 4,
+    });
+  }, [rosterRef]);
+  React.useEffect(updateEdges, [updateEdges, tile, rosterSize.w]);
+
   const handleSelect = (id: string) => {
     setSelectedId(id);
     new Audio('/assets/select.wav').play().catch(() => {});
   };
 
-  const stepDifficulty = (dir: 1 | -1) => {
-    const i = DIFFICULTY_LEVELS.indexOf(difficulty);
-    const next = DIFFICULTY_LEVELS[(i + dir + DIFFICULTY_LEVELS.length) % DIFFICULTY_LEVELS.length];
-    setDifficulty(next);
-  };
-
   const handleFight = () => {
-    ReactGA.event({ category: 'Game', action: 'Fight Started', label: `${selected.name} · ${difficulty}` });
+    ReactGA.event({ category: 'Game', action: 'Fight Started', label: selected.name });
     startGauntlet(selected);
     navigate('/arena');
   };
@@ -132,7 +136,7 @@ export default function CharacterSelect() {
       />
       <div
         className="absolute inset-0 -z-10 transition-all duration-500"
-        style={{ background: `radial-gradient(55% 75% at 24% 48%, ${accent}2e, transparent 70%)` }}
+        style={{ background: `radial-gradient(55% 75% at 82% 55%, ${accent}2e, transparent 70%)` }}
       />
 
       {/* Header */}
@@ -155,26 +159,60 @@ export default function CharacterSelect() {
           </div>
         </div>
 
-        <div className="flex flex-col items-end">
-          <span className="text-[8px] sm:text-[10px] text-gray-400 tracking-[0.2em] uppercase mb-0.5">Difficulty</span>
-          <div className="flex items-center gap-1 bg-black/40 rounded-lg backdrop-blur-sm px-1 py-0.5">
-            <button onClick={() => stepDifficulty(-1)} className="p-1 text-gray-300 hover:text-white">
-              <ChevronLeft size={14} />
-            </button>
-            <span className="w-14 text-center text-xs sm:text-sm font-bold" style={{ color: accent }}>{difficulty}</span>
-            <button onClick={() => stepDifficulty(1)} className="p-1 text-gray-300 hover:text-white">
-              <ChevronRight size={14} />
-            </button>
-          </div>
-        </div>
+        {/* spacer to keep the title centered opposite the Back button */}
+        <div className="w-[68px] shrink-0" />
       </div>
 
-      {/* Body: hero splash (left) + roster that scrolls as one (right) */}
+      {/* Body: roster that scrolls as one (left) + hero splash (right) */}
       <div className="flex-1 flex gap-2 sm:gap-3 min-h-0 px-3 pb-2 pt-1">
+        {/* Roster — two rows in one horizontal scroll container, so they move
+            together; edge fades hint that more fighters are off-screen. */}
+        <div className="relative flex-1 min-w-0 min-h-0">
+          <div
+            ref={rosterRef}
+            onScroll={updateEdges}
+            className="h-full overflow-x-auto overflow-y-hidden no-scrollbar"
+          >
+            {tile > 0 && (
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateRows: `repeat(2, ${tile}px)`,
+                  gridAutoFlow: 'column',
+                  gridAutoColumns: `${tile}px`,
+                  gap: GAP,
+                  justifyContent: 'start',
+                  alignContent: 'center',
+                  height: '100%',
+                }}
+              >
+                {characters.map((character) => (
+                  <Tile key={character.id} character={character} />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* left fade — appears once you've scrolled */}
+          <div
+            className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-black/80 to-transparent transition-opacity duration-200"
+            style={{ opacity: edges.left ? 1 : 0 }}
+          />
+          {/* right fade + chevron — "more fighters this way" */}
+          <div
+            className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-black/85 to-transparent flex items-center justify-end pr-1 transition-opacity duration-200"
+            style={{ opacity: edges.right ? 1 : 0 }}
+          >
+            <motion.div animate={{ x: [0, 4, 0] }} transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}>
+              <ChevronRight size={22} className="text-white/70" />
+            </motion.div>
+          </div>
+        </div>
+
         {/* Hero */}
         <motion.div
           key={selected.id}
-          initial={{ opacity: 0, x: -12 }}
+          initial={{ opacity: 0, x: 12 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.2 }}
           className="w-[32%] max-w-[16rem] shrink-0 flex flex-col min-h-0"
@@ -227,28 +265,6 @@ export default function CharacterSelect() {
             FIGHT
           </motion.button>
         </motion.div>
-
-        {/* Roster — two rows in one horizontal scroll container, so they move together */}
-        <div ref={rosterRef} className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden no-scrollbar">
-          {tile > 0 && (
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateRows: `repeat(2, ${tile}px)`,
-                gridAutoFlow: 'column',
-                gridAutoColumns: `${tile}px`,
-                gap: GAP,
-                justifyContent: 'start',
-                alignContent: 'center',
-                height: '100%',
-              }}
-            >
-              {characters.map((character) => (
-                <Tile key={character.id} character={character} />
-              ))}
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );
