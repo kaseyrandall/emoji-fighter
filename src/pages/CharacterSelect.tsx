@@ -94,7 +94,7 @@ export default function CharacterSelect() {
                   onClick={() => handleSelect(character.id)}
                   whileHover={{ scale: 1.04 }}
                   whileTap={{ scale: 0.95 }}
-                  className="relative min-h-0 rounded-xl border-2 flex flex-col items-center justify-center gap-0.5 p-1
+                  className="relative min-h-0 rounded-xl border-2 flex flex-col items-center justify-center gap-1.5 lg:gap-2.5 p-1
                            bg-gray-800/70 hover:bg-gray-700/70 transition-colors"
                   style={{
                     borderColor: isSelected ? a : 'rgba(75,85,99,0.6)',
