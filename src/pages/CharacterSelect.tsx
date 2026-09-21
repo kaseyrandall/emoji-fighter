@@ -169,28 +169,30 @@ export default function CharacterSelect() {
         </div>
       </div>
 
-      {/* Body: hero band on top, roster flowing underneath */}
-      <div className="flex-1 flex flex-col gap-2 min-h-0 px-3 pb-2 pt-1">
-        {/* Hero band */}
+      {/* Body: hero splash (left) + roster that scrolls as one (right) */}
+      <div className="flex-1 flex gap-2 sm:gap-3 min-h-0 px-3 pb-2 pt-1">
+        {/* Hero */}
         <motion.div
           key={selected.id}
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0, x: -12 }}
+          animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.2 }}
-          className="shrink-0 flex items-center gap-3"
+          className="w-[32%] max-w-[16rem] shrink-0 flex flex-col min-h-0"
         >
-          <motion.span
-            className="shrink-0 leading-none text-6xl sm:text-7xl lg:text-8xl"
-            style={{ filter: `drop-shadow(0 6px 18px ${accent}aa)` }}
-            animate={{ y: [0, -5, 0] }}
-            transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-          >
-            {selected.emoji}
-          </motion.span>
+          <div className="flex-1 min-h-0 flex items-center justify-center overflow-hidden">
+            <motion.span
+              className="leading-none text-5xl sm:text-7xl lg:text-8xl"
+              style={{ filter: `drop-shadow(0 6px 18px ${accent}aa)` }}
+              animate={{ y: [0, -6, 0] }}
+              transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              {selected.emoji}
+            </motion.span>
+          </div>
 
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5">
-              <h3 className="flex-1 min-w-0 truncate font-bold text-lg sm:text-2xl leading-none" style={{ textShadow: `0 0 14px ${accent}88` }}>
+          <div className="shrink-0">
+            <div className="flex items-start gap-1.5">
+              <h3 className="flex-1 min-w-0 font-bold text-lg sm:text-xl leading-[1.05] break-words line-clamp-2" style={{ textShadow: `0 0 14px ${accent}88` }}>
                 {selected.name}
               </h3>
               <span
@@ -206,7 +208,7 @@ export default function CharacterSelect() {
               <span className="truncate">{selected.specialName}</span>
             </div>
 
-            <div className="mt-1.5 grid grid-cols-3 gap-x-3 gap-y-1 max-w-xl">
+            <div className="mt-2 space-y-1.5">
               <StatBar label="POW" value={selected.stats.power} accent={accent} />
               <StatBar label="SPD" value={selected.stats.speed} accent={accent} />
               <StatBar label="TEC" value={selected.stats.technique} accent={accent} />
@@ -218,7 +220,7 @@ export default function CharacterSelect() {
             whileTap={{ scale: 0.96 }}
             animate={{ boxShadow: ['0 0 0px rgba(239,68,68,0)', '0 0 22px rgba(239,68,68,0.55)', '0 0 0px rgba(239,68,68,0)'] }}
             transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
-            className="shrink-0 self-stretch px-4 sm:px-6 bg-gradient-to-r from-red-600 to-orange-500 rounded-lg
+            className="shrink-0 mt-2 w-full py-2.5 sm:py-3 bg-gradient-to-r from-red-600 to-orange-500 rounded-lg
                      font-bold text-sm sm:text-lg flex items-center justify-center gap-2"
           >
             <Swords size={18} />
@@ -226,7 +228,7 @@ export default function CharacterSelect() {
           </motion.button>
         </motion.div>
 
-        {/* Roster — two rows that scroll together as one unit */}
+        {/* Roster — two rows in one horizontal scroll container, so they move together */}
         <div ref={rosterRef} className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden no-scrollbar">
           {tile > 0 && (
             <div
