@@ -8,8 +8,8 @@ import { Swords, Sparkles, ArrowLeft } from 'lucide-react';
 
 const StatBar = ({ label, value }: { label: string; value: number }) => (
   <div className="flex items-center gap-2">
-    <span className="w-16 text-[9px] lg:text-[11px] text-gray-300 text-left shrink-0">{label}</span>
-    <div className="flex-1 h-2 lg:h-2.5 bg-gray-700 rounded-full overflow-hidden">
+    <span className="w-[70px] sm:w-24 text-[11px] sm:text-xs text-gray-300 text-left shrink-0">{label}</span>
+    <div className="flex-1 h-2.5 sm:h-3 bg-gray-700 rounded-full overflow-hidden">
       <div
         className="h-full bg-gradient-to-r from-yellow-500 to-orange-500"
         style={{ width: `${Math.min(100, (value / 10) * 100)}%` }}
@@ -61,20 +61,14 @@ export default function CharacterSelect() {
                 <button
                   key={character.id}
                   onClick={() => handleSelect(character.id)}
-                  className={`relative aspect-square rounded-lg border-2 flex flex-col items-center justify-center
+                  className={`relative aspect-square rounded-xl border-2 flex flex-col items-center justify-center gap-1 p-1
                            transition-colors bg-gray-800/70 hover:bg-gray-700/70
-                           ${isSelected ? 'border-yellow-400 bg-gray-700' : 'border-gray-700/60'}`}
+                           ${isSelected ? 'border-yellow-400 bg-gray-700 ring-2 ring-yellow-400/40' : 'border-gray-700/60'}`}
                 >
-                  <span className="text-2xl lg:text-4xl leading-none">{character.emoji}</span>
-                  <span className="mt-0.5 text-[7px] lg:text-[9px] text-gray-300 leading-tight text-center px-0.5 truncate w-full">
+                  <span className="text-4xl sm:text-5xl lg:text-6xl leading-none">{character.emoji}</span>
+                  <span className="text-[11px] sm:text-xs lg:text-sm font-semibold text-gray-200 leading-tight text-center line-clamp-2 px-0.5">
                     {character.name}
                   </span>
-                  {isSelected && (
-                    <motion.div
-                      layoutId="select-glow"
-                      className="absolute inset-0 rounded-lg ring-2 ring-yellow-400 pointer-events-none"
-                    />
-                  )}
                 </button>
               );
             })}
@@ -90,19 +84,19 @@ export default function CharacterSelect() {
           className="w-40 sm:w-52 lg:w-72 shrink-0 flex flex-col bg-gray-800/60 rounded-xl p-2 lg:p-4 border border-gray-700/60"
         >
           <div className="flex items-center gap-2 lg:gap-3">
-            <span className="text-4xl lg:text-6xl leading-none">{selected.emoji}</span>
+            <span className="text-5xl sm:text-6xl lg:text-7xl leading-none">{selected.emoji}</span>
             <div className="min-w-0">
-              <div className="font-bold text-sm lg:text-xl leading-tight">{selected.name}</div>
-              <div className="flex items-center gap-1 text-[9px] lg:text-xs text-yellow-400">
-                <Sparkles size={11} />
-                <span className="truncate">{selected.specialName}</span>
+              <div className="font-bold text-lg sm:text-xl lg:text-2xl leading-tight">{selected.name}</div>
+              <div className="flex items-center gap-1 text-[11px] sm:text-xs lg:text-sm text-yellow-400 mt-0.5">
+                <Sparkles size={12} className="shrink-0" />
+                <span>{selected.specialName}</span>
               </div>
             </div>
           </div>
 
-          <p className="hidden lg:block text-xs text-gray-400 mt-2">{selected.description}</p>
+          <p className="text-[11px] sm:text-xs lg:text-sm text-gray-400 mt-2 lg:mt-3 leading-snug">{selected.description}</p>
 
-          <div className="mt-2 lg:mt-4 space-y-1.5 lg:space-y-2">
+          <div className="mt-3 lg:mt-4 space-y-2 lg:space-y-2.5">
             <StatBar label="Power" value={selected.stats.power} />
             <StatBar label="Speed" value={selected.stats.speed} />
             <StatBar label="Technique" value={selected.stats.technique} />

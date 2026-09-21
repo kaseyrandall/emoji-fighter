@@ -151,14 +151,19 @@ export default function GameArena() {
     bgm.loop = true;
     bgm.volume = 0.3;
     bgm.play().catch(() => {});
-    
-    startCountdown();
 
     return () => {
       bgm.pause();
       bgm.currentTime = 0;
     };
   }, []);
+
+  // Each bout opens on the VS intro screen, then rolls into the countdown.
+  useEffect(() => {
+    if (gameStatus !== 'intro') return;
+    const t = setTimeout(() => startCountdown(), 2200);
+    return () => clearTimeout(t);
+  }, [gameStatus, gauntletStage]);
 
   useEffect(() => {
     if (gameStatus === 'won' || gameStatus === 'champion') {
@@ -386,6 +391,61 @@ export default function GameArena() {
           </motion.div>
         </motion.div>
       </div>
+
+      {/* VS intro / loading screen shown before each gauntlet bout */}
+      {gameStatus === 'intro' && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center z-20 px-4">
+          {gauntletOpponents.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="font-arcade text-orange-400 text-sm lg:text-xl mb-6 lg:mb-10 tracking-wide"
+            >
+              FIGHT {gauntletStage + 1} <span className="text-gray-500">/</span> {gauntletOpponents.length}
+            </motion.div>
+          )}
+          <div className="flex items-center justify-center gap-4 lg:gap-10 w-full max-w-3xl">
+            <motion.div
+              initial={{ opacity: 0, x: -80 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ type: 'spring', stiffness: 220, damping: 20 }}
+              className="flex flex-col items-center gap-1 flex-1 min-w-0"
+            >
+              <span className="text-6xl lg:text-8xl leading-none">{selectedCharacter.emoji}</span>
+              <span className="font-bold text-sm lg:text-2xl text-center leading-tight">{selectedCharacter.name}</span>
+              <span className="text-[10px] lg:text-sm text-yellow-400 text-center leading-tight">{selectedCharacter.specialName}</span>
+            </motion.div>
+
+            <motion.div
+              initial={{ scale: 0, rotate: -25 }}
+              animate={{ scale: 1, rotate: 0 }}
+              transition={{ delay: 0.15, type: 'spring', stiffness: 300, damping: 14 }}
+              className="font-arcade text-3xl lg:text-6xl text-red-500 drop-shadow-[0_0_14px_rgba(255,0,0,0.6)] shrink-0"
+            >
+              VS
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, x: 80 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ type: 'spring', stiffness: 220, damping: 20 }}
+              className="flex flex-col items-center gap-1 flex-1 min-w-0"
+            >
+              <span className="text-6xl lg:text-8xl leading-none">{opponent.emoji}</span>
+              <span className="font-bold text-sm lg:text-2xl text-center leading-tight">{opponent.name}</span>
+              <span className="text-[10px] lg:text-sm text-yellow-400 text-center leading-tight">{opponent.specialName}</span>
+            </motion.div>
+          </div>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.8 }}
+            className="mt-6 lg:mt-10 text-gray-400 text-[11px] lg:text-base"
+          >
+            Get ready…
+          </motion.div>
+        </div>
+      )}
 
       {/* Game Status Overlay */}
       {(gameStatus === 'ready' || gameStatus === 'paused' || gameStatus === 'won' || gameStatus === 'lost' || gameStatus === 'champion') && (

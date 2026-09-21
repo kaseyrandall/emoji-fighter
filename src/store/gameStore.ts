@@ -44,8 +44,9 @@ const shuffle = <T,>(arr: T[]): T[] => {
 const randomStageId = () => stages[Math.floor(Math.random() * stages.length)].id;
 
 // State shared by startGauntlet / advanceGauntlet when a fresh bout begins.
+// Bouts open on the 'intro' VS screen; the arena starts the countdown after it.
 const freshBout = () => ({
-  gameStatus: 'ready' as const,
+  gameStatus: 'intro' as const,
   round: 1,
   countdown: 3,
   timer: 99,
@@ -151,7 +152,7 @@ export const useGameStore = create<GameStore>((set) => ({
       opponentHealth: nextOpponent.health,
       ...freshBout(),
     });
-    useGameStore.getState().startCountdown();
+    // The arena shows the VS intro, then starts the countdown.
   },
 
   performMove: (move) => {
