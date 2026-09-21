@@ -19,7 +19,7 @@ function AppContent() {
   const showOrientationModal = !isLandscape && location.pathname !== '/';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 to-black text-white">
+    <div className="min-h-[100dvh] bg-gradient-to-br from-gray-900 to-black text-white">
       <AnimatePresence>
         {showOrientationModal && <OrientationModal />}
       </AnimatePresence>

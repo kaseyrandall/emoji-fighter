@@ -1,43 +1,25 @@
 import React from 'react';
-import { Move } from '../types/game';
 
 interface JoystickProps {
-  onMove: (move: Move) => void;
+  // Continuous horizontal input, -1 (full left) .. 1 (full right), 0 = centered.
+  onMoveDir: (dir: number) => void;
+  onJump: () => void;
   size?: number;
 }
 
-// A thumb joystick that maps analog drag onto the game's discrete moves:
-// hold left/right to step that way (repeats while held), push up to jump.
-export default function Joystick({ onMove, size = 128 }: JoystickProps) {
+// A thumb joystick: tilt left/right to move (further = faster, fed into the
+// physics loop), push up to jump. Reports a continuous direction and zeroes it
+// on release so the fighter coasts to a stop.
+export default function Joystick({ onMoveDir, onJump, size = 128 }: JoystickProps) {
   const baseRef = React.useRef<HTMLDivElement>(null);
   const [knob, setKnob] = React.useState({ x: 0, y: 0 });
   const [active, setActive] = React.useState(false);
 
   const dragging = React.useRef(false);
-  const dir = React.useRef<'left' | 'right' | null>(null);
-  const repeat = React.useRef<ReturnType<typeof setInterval>>();
   const jumped = React.useRef(false);
 
   const knobMax = size * 0.32; // how far the knob can travel from center
-  const dead = knobMax * 0.4; // deadzone before a direction registers
-
-  const stopRepeat = () => {
-    if (repeat.current) {
-      clearInterval(repeat.current);
-      repeat.current = undefined;
-    }
-    dir.current = null;
-  };
-
-  const setDir = (next: 'left' | 'right' | null) => {
-    if (next === dir.current) return;
-    stopRepeat();
-    dir.current = next;
-    if (next) {
-      onMove(next);
-      repeat.current = setInterval(() => onMove(next), 110);
-    }
-  };
+  const dead = knobMax * 0.32; // deadzone before input registers
 
   const handle = (clientX: number, clientY: number) => {
     const base = baseRef.current;
@@ -55,22 +37,22 @@ export default function Joystick({ onMove, size = 128 }: JoystickProps) {
     // Up (dominant) = jump, once per push.
     if (dy < -dead && Math.abs(dy) >= Math.abs(dx)) {
       if (!jumped.current) {
-        onMove('jump');
+        onJump();
         jumped.current = true;
       }
-      setDir(null);
-    } else {
-      jumped.current = false;
-      if (dx < -dead) setDir('left');
-      else if (dx > dead) setDir('right');
-      else setDir(null);
+      onMoveDir(0);
+      return;
     }
+    jumped.current = false;
+
+    const nx = dx / knobMax; // -1 .. 1
+    onMoveDir(Math.abs(nx) > 0.22 ? Math.max(-1, Math.min(1, nx)) : 0);
   };
 
   const reset = () => {
     dragging.current = false;
     jumped.current = false;
-    stopRepeat();
+    onMoveDir(0);
     setKnob({ x: 0, y: 0 });
     setActive(false);
   };
@@ -85,7 +67,8 @@ export default function Joystick({ onMove, size = 128 }: JoystickProps) {
     if (dragging.current) handle(e.clientX, e.clientY);
   };
 
-  React.useEffect(() => () => stopRepeat(), []);
+  // Stop moving if the joystick ever goes away mid-input.
+  React.useEffect(() => () => onMoveDir(0), [onMoveDir]);
 
   return (
     <div

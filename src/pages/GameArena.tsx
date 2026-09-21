@@ -61,8 +61,21 @@ export default function GameArena() {
     gauntletStage,
     gauntletOpponents,
     advanceGauntlet,
-    playerFacing
+    playerFacing,
+    setMoveDir,
+    performSpecial,
+    specialMeter
   } = useGameStore();
+
+  // Super meter: charged by landing punches/kicks; the special fires only when full.
+  const specialReady = specialMeter >= 100;
+  const useSpecial = () => {
+    const s = useGameStore.getState();
+    if (s.gameStatus === 'playing' && s.specialMeter >= 100) {
+      performSpecial();
+      playMoveSound('special');
+    }
+  };
 
   const stage = stages.find(s => s.id === currentStage);
   const nextOpponent = gauntletOpponents[gauntletStage + 1];
@@ -194,9 +207,9 @@ export default function GameArena() {
   }, [gameStatus]);
 
   useEffect(() => {
-    const handleKeyPress = (e: KeyboardEvent) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (gameStatus !== 'playing') return;
-      
+
       switch (e.key.toLowerCase()) {
         case 'j':
           performMove('punch');
@@ -207,14 +220,13 @@ export default function GameArena() {
           playMoveSound('kick');
           break;
         case 'l':
-          performMove('special');
-          playMoveSound('special');
+          useSpecial();
           break;
         case 'a':
-          performMove('left');
+          setMoveDir(-1);
           break;
         case 'd':
-          performMove('right');
+          setMoveDir(1);
           break;
         case 'w':
           performMove('jump');
@@ -225,8 +237,17 @@ export default function GameArena() {
       }
     };
 
-    window.addEventListener('keydown', handleKeyPress);
-    return () => window.removeEventListener('keydown', handleKeyPress);
+    const handleKeyUp = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase();
+      if (k === 'a' || k === 'd') setMoveDir(0);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
   }, [gameStatus]);
 
   const playMoveSound = (move: string) => {
@@ -261,7 +282,7 @@ export default function GameArena() {
   if (!selectedCharacter || !opponent) return null;
 
   return (
-    <div className="relative min-h-screen flex flex-col items-center justify-between overflow-hidden">
+    <div className="relative h-[100dvh] flex flex-col items-center justify-between overflow-hidden">
       {/* Stage Background */}
       <div 
         className="absolute inset-0 bg-black bg-cover bg-center"
@@ -272,75 +293,86 @@ export default function GameArena() {
       {/* Ambient Light Overlay */}
       <div className={`absolute inset-0 ${stage?.ambientLight} mix-blend-overlay`} />
       
-      {/* Health Bars */}
-      <div className="relative lg:w-full w-[80%] max-w-4xl flex justify-between gap-4 text-lg pt-4 z-10">
-        {/* Pause Button — only while playing; resume happens via the overlay,
-            so a stray double-tap can't immediately toggle back to playing. */}
-        {gameStatus === 'playing' && (
-          <button
-            onClick={pauseGame}
-            className="fixed top-4 left-4 z-20 w-10 h-10 bg-gray-700/50 rounded-lg hover:bg-gray-600/50
-                     flex items-center justify-center backdrop-blur-sm"
-          >
-            <Pause size={20} />
-          </button>
-        )}
+      {/* Top HUD — corner portraits, full-width health bars meeting a central
+          round/timer badge (MK-style). */}
+      <div className="relative w-full max-w-5xl mx-auto flex items-start gap-1.5 sm:gap-3 px-2 sm:px-3 pt-2 z-10">
+        {/* Player portrait */}
+        <div
+          className="shrink-0 w-11 h-11 sm:w-14 sm:h-14 rounded-lg flex items-center justify-center text-2xl sm:text-4xl bg-gray-900/60 backdrop-blur-sm transition-colors"
+          style={{ border: `2px solid ${specialReady ? '#d8b4fe' : 'rgba(34,197,94,0.7)'}` }}
+        >
+          {selectedCharacter.emoji}
+        </div>
 
-        <div className="flex-1">
-          <div className="text-yellow-400 font-arcade text-sm mb-2">
-            Wins: {playerWins}
+        {/* Player info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1 mb-0.5">
+            <span className="truncate text-[10px] sm:text-xs font-semibold">{selectedCharacter.name}</span>
+            <div className="flex gap-0.5 shrink-0 ml-auto">
+              {[0, 1].map((i) => (
+                <span key={i} className="w-1.5 h-1.5 rounded-full" style={{ background: i < playerWins ? '#fbbf24' : 'rgba(255,255,255,0.25)' }} />
+              ))}
+            </div>
           </div>
-          <div className="flex justify-between mb-2 text-sm">
-            <span>{selectedCharacter.name}</span>
-            <span>{playerHealth}%</span>
+          <div className="h-2.5 sm:h-3.5 bg-gray-800/80 rounded-full overflow-hidden border border-black/40">
+            <div className="h-full bg-gradient-to-r from-green-400 to-green-500 transition-all duration-300" style={{ width: `${playerHealth}%` }} />
           </div>
-          <div className="h-4 bg-gray-700 rounded-full overflow-hidden">
+          {/* super meter (charged by landing attacks) */}
+          <div className="mt-1 h-1.5 bg-gray-800/70 rounded-full overflow-hidden">
             <div
-              className="h-full bg-green-500 transition-all duration-300"
-              style={{ width: `${playerHealth}%` }}
+              className="h-full transition-all duration-200"
+              style={{
+                width: `${specialMeter}%`,
+                background: specialReady ? '#e9d5ff' : 'linear-gradient(90deg,#7c3aed,#c084fc)',
+                boxShadow: specialReady ? '0 0 8px rgba(216,180,254,0.9)' : undefined,
+              }}
             />
           </div>
         </div>
-        
-        <div className="font-arcade text-4xl text-red-500 flex items-center 
-                    drop-shadow-[0_0_10px_rgba(255,0,0,0.5)]">
-          VS
+
+        {/* Central round / timer badge */}
+        <div className="shrink-0 flex flex-col items-center -mt-0.5">
+          <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-full bg-gray-900/70 border-2 border-yellow-500/80 flex items-center justify-center text-yellow-400 text-sm sm:text-xl font-bold tabular-nums shadow-[0_0_12px_rgba(234,179,8,0.4)]">
+            {timer}
+          </div>
+          <div className="text-[8px] sm:text-[9px] text-gray-300 mt-0.5 tracking-wide uppercase leading-none">Round {round}</div>
+          {gauntletOpponents.length > 0 && (
+            <div className="text-[7px] sm:text-[8px] text-orange-300/80 leading-none mt-0.5">{gauntletStage + 1}/{gauntletOpponents.length}</div>
+          )}
+          {gameStatus === 'playing' && (
+            <button
+              onClick={pauseGame}
+              className="mt-1 w-6 h-6 bg-gray-700/60 rounded-md hover:bg-gray-600/60 flex items-center justify-center backdrop-blur-sm"
+              aria-label="Pause"
+            >
+              <Pause size={13} />
+            </button>
+          )}
         </div>
-        
-        <div className="flex-1">
-          <div className="text-yellow-400 font-arcade text-sm mb-2 text-right">
-            Wins: {opponentWins}
+
+        {/* Opponent info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1 mb-0.5">
+            <div className="flex gap-0.5 shrink-0">
+              {[0, 1].map((i) => (
+                <span key={i} className="w-1.5 h-1.5 rounded-full" style={{ background: i < opponentWins ? '#fbbf24' : 'rgba(255,255,255,0.25)' }} />
+              ))}
+            </div>
+            <span className="truncate text-[10px] sm:text-xs font-semibold text-right ml-auto">{opponent.name}</span>
           </div>
-          <div className="flex justify-between mb-2 text-sm">
-            <span>{opponent.name}</span>
-            <span>{opponentHealth}%</span>
+          <div className="h-2.5 sm:h-3.5 bg-gray-800/80 rounded-full overflow-hidden border border-black/40 flex justify-end">
+            <div className="h-full bg-gradient-to-l from-red-400 to-red-500 transition-all duration-300" style={{ width: `${opponentHealth}%` }} />
           </div>
-          <div className="h-4 bg-gray-700 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-green-500 transition-all duration-300"
-              style={{ width: `${opponentHealth}%` }}
-            />
-          </div>
+        </div>
+
+        {/* Opponent portrait */}
+        <div className="shrink-0 w-11 h-11 sm:w-14 sm:h-14 rounded-lg flex items-center justify-center text-2xl sm:text-4xl bg-gray-900/60 backdrop-blur-sm border-2 border-red-500/70">
+          {opponent.emoji}
         </div>
       </div>
 
       {/* Arena */}
       <div className="relative flex-1 w-full flex flex-col justify-end pb-8 lg:pb-0">
-        {/* Timer, Round, and Gauntlet progress */}
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 flex flex-col items-center z-10 drop-shadow-[0_0_10px_rgba(255,0,0,0.5)]">
-          <div className="text-lg text-yellow-400">
-            {timer}
-          </div>
-          <div className="text-md text-white">
-            Round {round}
-          </div>
-          {gauntletOpponents.length > 0 && (
-            <div className="text-[10px] lg:text-xs text-orange-300 mt-0.5">
-              Fight {gauntletStage + 1} / {gauntletOpponents.length}
-            </div>
-          )}
-        </div>
-        
         {/* Floor */}
         <div className={`absolute bottom-0 w-full h-48 ${stage?.floorColor}`} />
         
@@ -368,13 +400,15 @@ export default function GameArena() {
           </AnimatePresence>
 
           <motion.div
-            className="text-[8rem] lg:text-[12rem] absolute"
+            className="text-[5.5rem] sm:text-[6.5rem] lg:text-[9rem] absolute"
             style={{
               left: `${playerPosition}%`,
               bottom: `${playerY}px`,
-              transition: 'left 0.2s ease-out, bottom 0.3s ease-out',
+              transition: 'bottom 0.08s linear',
               filter: flash === 'player'
                 ? 'brightness(1.9) drop-shadow(0 0 22px rgba(255,40,40,0.95))'
+                : specialReady
+                ? 'drop-shadow(0 0 22px rgba(216,180,254,0.9))'
                 : 'drop-shadow(0 0 15px rgba(255,255,255,0.5))'
             }}
             animate={getPlayerAnimation()}
@@ -386,7 +420,7 @@ export default function GameArena() {
             {selectedCharacter.emoji}
           </motion.div>
           <motion.div
-            className="text-[8rem] lg:text-[12rem] absolute"
+            className="text-[5.5rem] sm:text-[6.5rem] lg:text-[9rem] absolute"
             style={{
               left: `${opponentPosition}%`,
               transition: 'left 0.2s ease-out',
@@ -563,26 +597,52 @@ export default function GameArena() {
         </div>
       )}
 
-      {/* Controls — only while actively playing, so they never sit under the overlay/footer */}
-      {gameStatus === 'playing' && (
-        <div className="game-controls lg:hidden">
+      {/* Controls — kept mounted across the round countdown too, so a joystick
+          held through a KO doesn't lose the still-down finger on the next round. */}
+      {(gameStatus === 'ready' || gameStatus === 'playing') && (
+        <div className="game-controls lg:hidden items-end">
           {/* Movement joystick */}
-          <Joystick onMove={performMove} size={116} />
+          <Joystick onMoveDir={setMoveDir} onJump={() => performMove('jump')} size={116} />
 
-          {/* Attack Controls */}
-          <div className="flex gap-4">
+          {/* Attack cluster — special as a clearly-visible apex above the
+              punch/kick primary pair (a triangle, no button hidden behind
+              another). */}
+          <div className="relative w-[10rem] h-[8.5rem] shrink-0 select-none">
+            {/* Special apex — always visible; the ring fills as the super meter
+                charges and the whole button glows once it's ready. */}
+            <motion.button
+              onClick={useSpecial}
+              className="game-button absolute top-0 left-1/2 -translate-x-1/2 w-16 h-16 rounded-full flex items-center justify-center text-2xl overflow-hidden focus:outline-none active:brightness-110"
+              style={{
+                background: 'radial-gradient(circle at 50% 35%, #a855f7, #6b21a8)',
+                opacity: specialReady ? 1 : 0.7,
+                border: `2px solid ${specialReady ? '#e9d5ff' : 'rgba(216,180,254,0.55)'}`,
+                boxShadow: specialReady ? '0 0 22px rgba(216,180,254,0.95)' : '0 0 10px rgba(168,85,247,0.5)',
+              }}
+              animate={specialReady ? { scale: [1, 1.09, 1] } : { scale: 1 }}
+              transition={specialReady ? { duration: 0.9, repeat: Infinity } : { duration: 0.2 }}
+              aria-label="Special"
+            >
+              {/* super meter fill (charged by landing attacks) */}
+              <span
+                className="absolute inset-x-0 bottom-0 bg-purple-200/70 pointer-events-none transition-[height] duration-200"
+                style={{ height: `${specialMeter}%` }}
+              />
+              <span className="relative drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]">✨</span>
+            </motion.button>
+
+            {/* Punch (primary) */}
             <button
               onClick={() => { performMove('punch'); playMoveSound('punch'); }}
-              className="attack-button punch"
+              className="game-button absolute bottom-0 left-0.5 w-[4.5rem] h-[4.5rem] rounded-full flex items-center justify-center text-3xl bg-red-500/55 border-2 border-red-300/70 focus:outline-none active:bg-red-600/70"
+              aria-label="Punch"
             >👊</button>
+            {/* Kick (primary) */}
             <button
               onClick={() => { performMove('kick'); playMoveSound('kick'); }}
-              className="attack-button kick"
+              className="game-button absolute bottom-0 right-0.5 w-[4.5rem] h-[4.5rem] rounded-full flex items-center justify-center text-3xl bg-blue-500/55 border-2 border-blue-300/70 focus:outline-none active:bg-blue-600/70"
+              aria-label="Kick"
             >🦶</button>
-            <button
-              onClick={() => { performMove('special'); playMoveSound('special'); }}
-              className="attack-button special"
-            >✨</button>
           </div>
         </div>
       )}
