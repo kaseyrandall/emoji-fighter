@@ -10,9 +10,19 @@ const nextHit = () => ++hitSeq;
 // How many opponents make up the gauntlet ladder (or all of them, if fewer).
 export const GAUNTLET_SIZE = Math.min(6, characters.length - 1);
 
+// Fighters are positioned by their left edge as a % of the arena. Keep them
+// inside these bounds so a fighter can never run off either edge of the screen.
+const POS_MIN = 4;
+const POS_MAX = 78;
+
 // AI timing state for the current round (reset when a round's AI loop starts).
 let aiLastAttackAt = 0;
 let aiEnteredRangeAt = 0;
+
+// Recovery between the player's own attacks, so mashing can't stack hits and
+// combat has a rhythm instead of a one-sided slam.
+const PLAYER_ATTACK_COOLDOWN = 340;
+let playerLastAttackAt = 0;
 
 // Difficulty ramps with the gauntlet stage: early fights are slow and gentle,
 // later fights are fast, aggressive, and hit harder.
@@ -72,6 +82,8 @@ interface GameStore extends GameState {
   endRound: (winner: 'player' | 'opponent') => void;
   resetGame: () => void;
   togglePause: () => void;
+  pauseGame: () => void;
+  resumeGame: () => void;
   playerPosition: number;
   opponentPosition: number;
   isAttacking: boolean;
@@ -162,13 +174,13 @@ export const useGameStore = create<GameStore>((set) => ({
     // Handle movement
     if (move === 'left') {
       set(state => ({
-        playerPosition: Math.max(0, state.playerPosition - 12),
+        playerPosition: Math.max(POS_MIN, state.playerPosition - 12),
       }));
       return;
     }
     if (move === 'right') {
       set(state => ({
-        playerPosition: Math.min(100, state.playerPosition + 12),
+        playerPosition: Math.min(POS_MAX, state.playerPosition + 12),
       }));
       return;
     }
@@ -198,6 +210,11 @@ export const useGameStore = create<GameStore>((set) => ({
       return;
     }
 
+    // Attacks (punch / kick / special) — enforce a recovery window.
+    const nowAttack = Date.now();
+    if (nowAttack - playerLastAttackAt < PLAYER_ATTACK_COOLDOWN) return;
+    playerLastAttackAt = nowAttack;
+
     set({ isAttacking: true, currentMove: move });
     setTimeout(() => set({ isAttacking: false, currentMove: null }), 600);
 
@@ -212,7 +229,7 @@ export const useGameStore = create<GameStore>((set) => ({
 
     // Knock the opponent back a touch on hit.
     const knockback = move === 'special' ? 8 : 4;
-    const knockedPosition = Math.min(100, state.opponentPosition + knockback);
+    const knockedPosition = Math.min(POS_MAX, state.opponentPosition + knockback);
 
     if (newOpponentHealth <= 0) {
       set({ opponentHealth: 0, opponentPosition: knockedPosition, hitEvent });
@@ -245,7 +262,7 @@ export const useGameStore = create<GameStore>((set) => ({
 
     // Knock the player back a touch on hit.
     const knockback = randomMove === 'special' ? 8 : 4;
-    const knockedPosition = Math.max(0, state.playerPosition - knockback);
+    const knockedPosition = Math.max(POS_MIN, state.playerPosition - knockback);
 
     if (newPlayerHealth <= 0) {
       set({ playerHealth: 0, playerPosition: knockedPosition, hitEvent });
@@ -277,11 +294,11 @@ export const useGameStore = create<GameStore>((set) => ({
         aiEnteredRangeAt = 0; // out of range — reset the reaction timer
         if (state.playerPosition < state.opponentPosition) {
           set(state => ({
-            opponentPosition: Math.max(0, state.opponentPosition - diff.moveSpeed)
+            opponentPosition: Math.max(POS_MIN, state.opponentPosition - diff.moveSpeed)
           }));
         } else {
           set(state => ({
-            opponentPosition: Math.min(100, state.opponentPosition + diff.moveSpeed)
+            opponentPosition: Math.min(POS_MAX, state.opponentPosition + diff.moveSpeed)
           }));
         }
         return;
@@ -428,7 +445,16 @@ export const useGameStore = create<GameStore>((set) => ({
     });
   },
 
-  togglePause: () => set((state) => ({
-    gameStatus: state.gameStatus === 'paused' ? 'playing' : 'paused'
-  }))
+  togglePause: () => set((state) =>
+    state.gameStatus === 'paused'
+      ? { gameStatus: 'playing' }
+      : state.gameStatus === 'playing'
+      ? { gameStatus: 'paused' }
+      : {}
+  ),
+
+  // Idempotent so a stray double-tap can't bounce the game straight back:
+  // pausing twice stays paused, resuming twice stays playing.
+  pauseGame: () => set((state) => (state.gameStatus === 'playing' ? { gameStatus: 'paused' } : {})),
+  resumeGame: () => set((state) => (state.gameStatus === 'paused' ? { gameStatus: 'playing' } : {}))
 }));

@@ -43,6 +43,8 @@ export default function GameArena() {
     performMove,
     resetGame,
     togglePause,
+    pauseGame,
+    resumeGame,
     isAttacking,
     currentMove,
     currentStage,
@@ -265,14 +267,17 @@ export default function GameArena() {
       
       {/* Health Bars */}
       <div className="relative lg:w-full w-[80%] max-w-4xl flex justify-between gap-4 text-lg pt-4 z-10">
-        {/* Pause Button */}
-        <button
-          onClick={togglePause}
-          className="fixed top-4 left-4 w-10 h-10 bg-gray-700/50 rounded-lg hover:bg-gray-600/50 
-                   flex items-center justify-center backdrop-blur-sm"
-        >
-          {gameStatus === 'paused' ? <Play size={20} /> : <Pause size={20} />}
-        </button>
+        {/* Pause Button — only while playing; resume happens via the overlay,
+            so a stray double-tap can't immediately toggle back to playing. */}
+        {gameStatus === 'playing' && (
+          <button
+            onClick={pauseGame}
+            className="fixed top-4 left-4 z-20 w-10 h-10 bg-gray-700/50 rounded-lg hover:bg-gray-600/50
+                     flex items-center justify-center backdrop-blur-sm"
+          >
+            <Pause size={20} />
+          </button>
+        )}
 
         <div className="flex-1">
           <div className="text-yellow-400 font-arcade text-sm mb-2">
@@ -506,7 +511,7 @@ export default function GameArena() {
               {gameStatus === 'paused' && (
                 <>
                   <button
-                    onClick={togglePause}
+                    onClick={resumeGame}
                     className="px-6 py-3 bg-green-500 rounded-lg flex items-center justify-center gap-2"
                   >
                     <Play size={20} />
