@@ -79,13 +79,14 @@ export default function GameArena() {
     setFlash(hitEvent.target);
     const flashTimer = setTimeout(() => setFlash(null), 150);
 
-    // Floating damage number above the struck fighter
+    // Floating damage number on the struck fighter — keep only the latest per
+    // fighter so rapid hits replace rather than pile up into an unreadable smear.
     const x = hitEvent.target === 'player' ? playerPosition : opponentPosition;
     const fh: FloatingHit = { id: hitEvent.seq, amount: hitEvent.amount, target: hitEvent.target, x, special };
-    setFloatingHits(prev => [...prev, fh]);
+    setFloatingHits(prev => [...prev.filter(h => h.target !== fh.target), fh]);
     const numTimer = setTimeout(() => {
       setFloatingHits(prev => prev.filter(h => h.id !== fh.id));
-    }, 800);
+    }, 550);
 
     return () => {
       clearTimeout(flashTimer);
@@ -326,8 +327,8 @@ export default function GameArena() {
                 style={{ left: `${h.x}%`, bottom: '90px', x: '-50%' }}
                 initial={{ opacity: 0, y: 0, scale: 0.6 }}
                 animate={{ opacity: 1, y: -25, scale: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.7, ease: 'easeOut' }}
+                exit={{ opacity: 0, transition: { duration: 0.15 } }}
+                transition={{ duration: 0.4, ease: 'easeOut' }}
               >
                 -{h.amount}
               </motion.div>
