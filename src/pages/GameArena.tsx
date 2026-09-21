@@ -62,8 +62,30 @@ export default function GameArena() {
     gauntletOpponents,
     advanceGauntlet,
     playerFacing,
-    setMoveDir
+    setMoveDir,
+    performSpecial
   } = useGameStore();
+
+  // Charge-up special: hold to build charge (up to CHARGE_MS = 2x), release to fire.
+  const CHARGE_MS = 900;
+  const chargeStart = useRef<number>(0);
+  const chargingRef = useRef(false);
+  const [charging, setCharging] = useState(false);
+
+  const beginCharge = () => {
+    if (useGameStore.getState().gameStatus !== 'playing' || chargingRef.current) return;
+    chargingRef.current = true;
+    chargeStart.current = Date.now();
+    setCharging(true);
+  };
+  const releaseSpecial = () => {
+    if (!chargingRef.current) return;
+    chargingRef.current = false;
+    const ratio = Math.max(0, Math.min(1, (Date.now() - chargeStart.current) / CHARGE_MS));
+    setCharging(false);
+    performSpecial(ratio);
+    playMoveSound('special');
+  };
 
   const stage = stages.find(s => s.id === currentStage);
   const nextOpponent = gauntletOpponents[gauntletStage + 1];
@@ -208,8 +230,7 @@ export default function GameArena() {
           playMoveSound('kick');
           break;
         case 'l':
-          performMove('special');
-          playMoveSound('special');
+          beginCharge();
           break;
         case 'a':
           setMoveDir(-1);
@@ -229,6 +250,7 @@ export default function GameArena() {
     const handleKeyUp = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
       if (k === 'a' || k === 'd') setMoveDir(0);
+      if (k === 'l') releaseSpecial();
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -385,6 +407,8 @@ export default function GameArena() {
               transition: 'bottom 0.08s linear',
               filter: flash === 'player'
                 ? 'brightness(1.9) drop-shadow(0 0 22px rgba(255,40,40,0.95))'
+                : charging
+                ? 'brightness(1.25) drop-shadow(0 0 28px rgba(216,180,254,0.95))'
                 : 'drop-shadow(0 0 15px rgba(255,255,255,0.5))'
             }}
             animate={getPlayerAnimation()}
@@ -591,9 +615,22 @@ export default function GameArena() {
               className="attack-button kick"
             >🦶</button>
             <button
-              onClick={() => { performMove('special'); playMoveSound('special'); }}
-              className="attack-button special"
-            >✨</button>
+              onPointerDown={(e) => { e.preventDefault(); beginCharge(); }}
+              onPointerUp={releaseSpecial}
+              onPointerLeave={releaseSpecial}
+              onPointerCancel={releaseSpecial}
+              className="attack-button special relative overflow-hidden"
+            >
+              {/* charge fill grows while held */}
+              <span
+                className="absolute inset-0 rounded-full bg-purple-300/70 origin-bottom pointer-events-none"
+                style={{
+                  transform: 'scaleY(0)',
+                  animation: charging ? `chargeGrow ${CHARGE_MS}ms linear forwards` : 'none',
+                }}
+              />
+              <span className="relative">✨</span>
+            </button>
           </div>
         </div>
       )}

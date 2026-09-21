@@ -99,6 +99,7 @@ interface GameStore extends GameState {
   playerVel: number;
   setMoveDir: (dir: number) => void;
   performMove: (move: Move) => void;
+  performSpecial: (chargeRatio: number) => void;
   endRound: (winner: 'player' | 'opponent') => void;
   resetGame: () => void;
   togglePause: () => void;
@@ -261,6 +262,38 @@ export const useGameStore = create<GameStore>((set) => ({
       return;
     }
 
+    set({ opponentHealth: newOpponentHealth, opponentPosition: knockedPosition, hitEvent });
+  },
+
+  // The special can be charged (held): chargeRatio 0..1 scales damage up to 2x
+  // and adds knockback, so timing a full charge is rewarded.
+  performSpecial: (chargeRatio) => {
+    const state = useGameStore.getState();
+    if (state.gameStatus !== 'playing') return;
+
+    const now = Date.now();
+    if (now - playerLastAttackAt < PLAYER_ATTACK_COOLDOWN) return;
+    playerLastAttackAt = now;
+
+    const ratio = Math.max(0, Math.min(1, chargeRatio));
+    set({ isAttacking: true, currentMove: 'special' });
+    setTimeout(() => set({ isAttacking: false, currentMove: null }), 600);
+
+    const distance = Math.abs(state.playerPosition - state.opponentPosition);
+    if (distance > 25) return;
+
+    const base = state.selectedCharacter?.moves.special || 0;
+    const damage = Math.round(base * (1 + ratio));
+    const newOpponentHealth = Math.max(0, state.opponentHealth - damage);
+    const hitEvent = { target: 'opponent' as const, amount: damage, move: 'special' as const, seq: nextHit() };
+
+    const knockedPosition = Math.min(POS_MAX, state.opponentPosition + 8 + ratio * 10);
+
+    if (newOpponentHealth <= 0) {
+      set({ opponentHealth: 0, opponentPosition: knockedPosition, hitEvent });
+      useGameStore.getState().endRound('player');
+      return;
+    }
     set({ opponentHealth: newOpponentHealth, opponentPosition: knockedPosition, hitEvent });
   },
 
