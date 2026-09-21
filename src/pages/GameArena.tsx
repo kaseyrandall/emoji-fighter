@@ -295,7 +295,7 @@ export default function GameArena() {
       
       {/* Top HUD — corner portraits, full-width health bars meeting a central
           round/timer badge (MK-style). */}
-      <div className="relative w-full max-w-5xl mx-auto flex items-start gap-1.5 sm:gap-3 px-2 sm:px-3 pt-2 z-10">
+      <div className="hud-text relative w-full max-w-5xl mx-auto flex items-start gap-1.5 sm:gap-3 px-2 sm:px-3 pt-2 z-10">
         {/* Player portrait */}
         <div
           className="shrink-0 w-11 h-11 sm:w-14 sm:h-14 rounded-lg flex items-center justify-center text-2xl sm:text-4xl bg-gray-900/60 backdrop-blur-sm transition-colors"
@@ -335,9 +335,9 @@ export default function GameArena() {
           <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-full bg-gray-900/70 border-2 border-yellow-500/80 flex items-center justify-center text-yellow-400 text-sm sm:text-xl font-bold tabular-nums shadow-[0_0_12px_rgba(234,179,8,0.4)]">
             {timer}
           </div>
-          <div className="text-[8px] sm:text-[9px] text-gray-300 mt-0.5 tracking-wide uppercase leading-none">Round {round}</div>
+          <div className="text-[8px] sm:text-[9px] text-white/95 mt-0.5 tracking-wide uppercase leading-none">Round {round}</div>
           {gauntletOpponents.length > 0 && (
-            <div className="text-[7px] sm:text-[8px] text-orange-300/80 leading-none mt-0.5">{gauntletStage + 1}/{gauntletOpponents.length}</div>
+            <div className="text-[7px] sm:text-[8px] text-orange-200 leading-none mt-0.5">{gauntletStage + 1}/{gauntletOpponents.length}</div>
           )}
           {gameStatus === 'playing' && (
             <button

@@ -159,7 +159,7 @@ export const useGameStore = create<GameStore>((set) => ({
   isAttacking: false,
   isOpponentAttacking: false,
   currentMove: null,
-  currentStage: 'night-market',
+  currentStage: stages[0].id,
   countdown: 3,
   timer: 99,
   playerWins: 0,

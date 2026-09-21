@@ -31,6 +31,12 @@
     @apply fixed bottom-0 w-full py-2 px-4 text-center text-xs text-gray-400 bg-black/50 backdrop-blur-sm z-50;
     padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
   }
+  /* HUD labels sit directly on the stage art, which ranges from a night
+     subway to a noon jungle sky. A shadow keeps them readable on the bright
+     stages without darkening the art behind them. */
+  .hud-text {
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 6px rgba(0, 0, 0, 0.55);
+  }
   .game-button {
     @apply select-none touch-none;
   }
