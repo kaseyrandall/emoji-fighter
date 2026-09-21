@@ -6,6 +6,7 @@ import UIFx from 'uifx';
 import { useGameStore } from '../store/gameStore';
 import { Pause, Play, RotateCcw, Swords } from 'lucide-react';
 import { stages } from '../data/stages';
+import Joystick from '../components/Joystick';
 
 interface FloatingHit {
   id: number;
@@ -547,21 +548,14 @@ export default function GameArena() {
               )}
             </div>
           </div>
-           <footer className="footer">
-        Copyright Edge Kase Inc 2025. All Rights Reserved.
-      </footer>
         </div>
       )}
 
       {/* Controls — only while actively playing, so they never sit under the overlay/footer */}
       {gameStatus === 'playing' && (
         <div className="game-controls lg:hidden">
-          {/* Movement Controls */}
-          <div className="flex gap-4">
-            <button onClick={() => performMove('left')} className="move-button">←</button>
-            <button onClick={() => performMove('jump')} className="move-button">↑</button>
-            <button onClick={() => performMove('right')} className="move-button">→</button>
-          </div>
+          {/* Movement joystick */}
+          <Joystick onMove={performMove} size={116} />
 
           {/* Attack Controls */}
           <div className="flex gap-4">
