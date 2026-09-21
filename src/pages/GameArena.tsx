@@ -460,31 +460,33 @@ export default function GameArena() {
         </div>
       )}
 
-      {/* Controls */}
-      <div className="game-controls lg:hidden">
-        {/* Movement Controls */}
-        <div className="flex gap-4">
-          <button onClick={() => performMove('left')} className="move-button">←</button>
-          <button onClick={() => performMove('jump')} className="move-button">↑</button>
-          <button onClick={() => performMove('right')} className="move-button">→</button>
-        </div>
+      {/* Controls — only while actively playing, so they never sit under the overlay/footer */}
+      {gameStatus === 'playing' && (
+        <div className="game-controls lg:hidden">
+          {/* Movement Controls */}
+          <div className="flex gap-4">
+            <button onClick={() => performMove('left')} className="move-button">←</button>
+            <button onClick={() => performMove('jump')} className="move-button">↑</button>
+            <button onClick={() => performMove('right')} className="move-button">→</button>
+          </div>
 
-        {/* Attack Controls */}
-        <div className="flex gap-4">
-          <button
-            onClick={() => { performMove('punch'); playMoveSound('punch'); }}
-            className="attack-button punch"
-          >👊</button>
-          <button
-            onClick={() => { performMove('kick'); playMoveSound('kick'); }}
-            className="attack-button kick"
-          >🦶</button>
-          <button
-            onClick={() => { performMove('special'); playMoveSound('special'); }}
-            className="attack-button special"
-          >✨</button>
+          {/* Attack Controls */}
+          <div className="flex gap-4">
+            <button
+              onClick={() => { performMove('punch'); playMoveSound('punch'); }}
+              className="attack-button punch"
+            >👊</button>
+            <button
+              onClick={() => { performMove('kick'); playMoveSound('kick'); }}
+              className="attack-button kick"
+            >🦶</button>
+            <button
+              onClick={() => { performMove('special'); playMoveSound('special'); }}
+              className="attack-button special"
+            >✨</button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

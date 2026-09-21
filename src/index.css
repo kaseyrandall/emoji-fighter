@@ -13,12 +13,16 @@
 @layer components {
   .footer {
     @apply fixed bottom-0 w-full py-2 px-4 text-center text-xs text-gray-400 bg-black/50 backdrop-blur-sm z-50;
+    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
   }
   .game-button {
     @apply select-none touch-none;
   }
   .game-controls {
     @apply fixed bottom-0 left-0 right-0 p-4 flex justify-between items-center;
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+    padding-left: calc(1rem + env(safe-area-inset-left));
+    padding-right: calc(1rem + env(safe-area-inset-right));
   }
   .move-button {
     @apply bg-gray-700/50 p-4 rounded-full text-lg font-bold active:bg-gray-600/50 transition-colors;

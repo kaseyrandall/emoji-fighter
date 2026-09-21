@@ -45,21 +45,21 @@ export default function CharacterSelect() {
   );
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen flex flex-col items-center justify-center gap-2 px-4 py-16 lg:py-4">
       <button
         onClick={() => navigate('/')}
-        className="absolute top-4 left-4 p-2 text-gray-400 hover:text-white transition-colors
-                 flex items-center gap-2 bg-gray-800/50 rounded-lg backdrop-blur-sm text-sm"
+        className="fixed top-3 left-3 z-10 p-2 text-gray-400 hover:text-white transition-colors
+                 flex items-center gap-2 bg-gray-800/50 rounded-lg backdrop-blur-sm text-xs lg:text-sm"
       >
         <ArrowLeft size={18} />
         <span>Back</span>
       </button>
-      
-      <h2 className="text-2xl lg:text-4xl font-bold mb-8">Choose Your Fighter</h2>
-      <div className="text-sm text-center p-8 text-gray-400">
+
+      <h2 className="text-xl lg:text-4xl font-bold mb-2 lg:mb-4 text-center">Choose Your Fighter</h2>
+      <div className="text-xs lg:text-sm text-center px-4 pb-2 lg:pb-4 text-gray-400">
         Use keyboard (WASD/JKL) on desktop or touch controls on mobile
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-5xl">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 lg:gap-5 max-w-5xl w-full">
         {characters.map((character) => (
           <motion.button
             key={character.id}
@@ -70,17 +70,17 @@ export default function CharacterSelect() {
               scale: selectedId === character.id ? [1, 1.1, 1] : 1,
               borderColor: selectedId === character.id ? '#ffd700' : '#1f2937'
             }}
-            className={`bg-gray-800 p-6 rounded-lg border-2 transition-colors
-                     flex flex-col items-center gap-4 group relative
+            className={`bg-gray-800 p-3 lg:p-5 rounded-lg border-2 transition-colors
+                     flex flex-col items-center gap-2 lg:gap-3 group relative
                      ${selectedId === character.id ? 'border-yellow-400' : 'border-transparent'}`}
           >
-            <div className="text-5xl lg:text-7xl group-hover:scale-110 transition-transform">
+            <div className="text-4xl lg:text-6xl group-hover:scale-110 transition-transform">
               {character.emoji}
             </div>
-            <div className="text-center">
-              <div className="font-bold mb-2">{character.name}</div>
-              <p className="text-xs text-gray-400 mb-4">{character.description}</p>
-              <div className="space-y-0">
+            <div className="text-center w-full">
+              <div className="font-bold text-sm lg:text-base mb-1 lg:mb-2">{character.name}</div>
+              <p className="hidden lg:block text-xs text-gray-400 mb-3">{character.description}</p>
+              <div className="space-y-1">
                 <StatDisplay value={character.moves.punch} icon={Fist} label="Punch" />
                 <StatDisplay value={character.moves.kick} icon={Boot} label="Kick" />
                 <StatDisplay value={character.moves.special} icon={Sparkles} label={character.specialName} />
@@ -89,7 +89,7 @@ export default function CharacterSelect() {
           </motion.button>
         ))}
       </div>
-      
+
     </div>
   );
 }
