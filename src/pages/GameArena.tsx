@@ -371,8 +371,10 @@ export default function GameArena() {
         </div>
       </div>
 
-      {/* Arena */}
-      <div className="relative flex-1 w-full flex flex-col justify-end pb-8 lg:pb-0">
+      {/* Arena — the bottom inset sets the fighters' ground line. It keeps them
+          standing back on the stage floor instead of at its front lip, and on
+          touch layouts it lifts them clear of the joystick and attack pads. */}
+      <div className="relative flex-1 w-full flex flex-col justify-end pb-10 lg:pb-16">
         {/* Floor */}
         <div className={`absolute bottom-0 w-full h-48 ${stage?.floorColor}`} />
         
