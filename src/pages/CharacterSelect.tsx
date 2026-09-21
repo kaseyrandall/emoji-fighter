@@ -94,23 +94,23 @@ export default function CharacterSelect() {
                   onClick={() => handleSelect(character.id)}
                   whileHover={{ scale: 1.04 }}
                   whileTap={{ scale: 0.95 }}
-                  className="relative aspect-square rounded-xl border-2 flex flex-col items-center justify-center gap-1 p-1
-                           bg-gray-800/70 hover:bg-gray-700/70 transition-colors overflow-hidden"
+                  className="relative aspect-square rounded-xl border-2 flex flex-col items-center justify-center gap-0.5 p-1
+                           bg-gray-800/70 hover:bg-gray-700/70 transition-colors"
                   style={{
                     borderColor: isSelected ? a : 'rgba(75,85,99,0.6)',
                     boxShadow: isSelected ? `0 0 22px ${a}66, inset 0 0 18px ${a}22` : undefined,
                   }}
                 >
                   <motion.span
-                    className="text-4xl sm:text-5xl lg:text-6xl leading-none"
-                    animate={{ scale: isSelected ? 1.12 : 1, y: isSelected ? -1 : 0 }}
+                    className="text-4xl sm:text-5xl leading-none"
+                    animate={{ scale: isSelected ? 1.08 : 1 }}
                     transition={{ type: 'spring', stiffness: 300, damping: 15 }}
                     style={{ filter: isSelected ? `drop-shadow(0 0 10px ${a}aa)` : undefined }}
                   >
                     {character.emoji}
                   </motion.span>
                   <span
-                    className="text-[11px] sm:text-xs lg:text-sm font-semibold leading-tight text-center line-clamp-2 px-0.5"
+                    className="w-full text-[10px] sm:text-[11px] lg:text-xs font-semibold leading-[1.05] text-center line-clamp-2"
                     style={{ color: isSelected ? '#fff' : '#d1d5db' }}
                   >
                     {character.name}
