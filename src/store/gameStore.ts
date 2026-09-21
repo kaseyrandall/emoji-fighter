@@ -30,6 +30,12 @@ let aiEnteredRangeAt = 0;
 // (leaked loops would fight over movement and appear to "break" the controls).
 let aiLoop: ReturnType<typeof setInterval> | undefined;
 let physicsLoop: ReturnType<typeof setInterval> | undefined;
+let countdownLoop: ReturnType<typeof setInterval> | undefined;
+let roundTimerLoop: ReturnType<typeof setInterval> | undefined;
+const clearRoundLoops = () => {
+  if (countdownLoop) { clearInterval(countdownLoop); countdownLoop = undefined; }
+  if (roundTimerLoop) { clearInterval(roundTimerLoop); roundTimerLoop = undefined; }
+};
 
 // Recovery between the player's own attacks, so mashing can't stack hits and
 // combat has a rhythm instead of a one-sided slam.
@@ -433,45 +439,48 @@ export const useGameStore = create<GameStore>((set) => ({
   },
 
   startCountdown: () => {
+    // Single-instance loops: clear any leftovers so the timer can't run at
+    // double/half speed from an overlapping interval.
+    clearRoundLoops();
     set({
       gameStatus: 'ready',
       countdown: 3,
       timer: 99
     });
 
-    const runTimer = () => {
-      const timerInterval = setInterval(() => {
-        const state = useGameStore.getState();
-        if (state.gameStatus === 'playing' && state.timer > 0) {
-          set({ timer: state.timer - 1 });
-        } else if (state.gameStatus === 'playing' && state.timer === 0) {
-          clearInterval(timerInterval);
-          const timeOverState = useGameStore.getState();
-          const winner = timeOverState.playerHealth > timeOverState.opponentHealth ? 'player' : 'opponent';
+    // Exactly one round timer, ticking once per second while the round is live.
+    const startRoundTimer = () => {
+      if (roundTimerLoop) clearInterval(roundTimerLoop);
+      roundTimerLoop = setInterval(() => {
+        const s = useGameStore.getState();
+        if (s.gameStatus !== 'playing') {
+          if (roundTimerLoop) { clearInterval(roundTimerLoop); roundTimerLoop = undefined; }
+          return;
+        }
+        if (s.timer > 0) {
+          set({ timer: s.timer - 1 });
+        } else {
+          if (roundTimerLoop) { clearInterval(roundTimerLoop); roundTimerLoop = undefined; }
+          const winner = s.playerHealth > s.opponentHealth ? 'player' : 'opponent';
           useGameStore.getState().endRound(winner);
-        } else if (state.gameStatus !== 'playing') {
-          clearInterval(timerInterval);
         }
       }, 1000);
     };
 
-    const countdownInterval = setInterval(() => {
-      const state = useGameStore.getState();
-      if (state.countdown > 0) {
-        set({ countdown: state.countdown - 1 });
-      } else if (state.countdown === 0) {
-        setTimeout(() => {
-        clearInterval(countdownInterval);
-        set({
-          gameStatus: 'playing',
-          countdown: -1
-        });
-        // Start opponent AI and the player physics loop when the round begins.
-        useGameStore.getState().opponentAI();
-        useGameStore.getState().playerPhysics();
-        runTimer();
-        }, 1000);
+    // 3 · 2 · 1 · FIGHT, then the round goes live. Clearing the countdown loop
+    // the instant it completes avoids a leftover tick re-triggering the start.
+    countdownLoop = setInterval(() => {
+      const c = useGameStore.getState().countdown;
+      if (c > 0) {
+        set({ countdown: c - 1 });
+        return;
       }
+      // c === 0 → go live once.
+      if (countdownLoop) { clearInterval(countdownLoop); countdownLoop = undefined; }
+      set({ gameStatus: 'playing', countdown: -1 });
+      useGameStore.getState().opponentAI();
+      useGameStore.getState().playerPhysics();
+      startRoundTimer();
     }, 1000);
   },
 
@@ -480,6 +489,9 @@ export const useGameStore = create<GameStore>((set) => ({
     // Only a live round can end. This guards against two near-simultaneous KOs
     // (e.g. rapid hits) both resolving the same round and double-counting a win.
     if (state.gameStatus !== 'playing') return;
+
+    // Stop the round timer/countdown immediately; the next bout restarts them.
+    clearRoundLoops();
 
     const baseHealth = state.selectedCharacter?.health || 100;
     const opponentBaseHealth = state.opponent?.health || 100;
@@ -540,6 +552,7 @@ export const useGameStore = create<GameStore>((set) => ({
   },
 
   resetGame: () => {
+    clearRoundLoops();
     set({
       playerHealth: 100,
       opponentHealth: 100,
