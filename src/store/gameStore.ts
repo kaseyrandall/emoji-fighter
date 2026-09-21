@@ -349,6 +349,10 @@ export const useGameStore = create<GameStore>((set) => ({
 
   endRound: (winner: 'player' | 'opponent') => {
     const state = useGameStore.getState();
+    // Only a live round can end. This guards against two near-simultaneous KOs
+    // (e.g. rapid hits) both resolving the same round and double-counting a win.
+    if (state.gameStatus !== 'playing') return;
+
     const baseHealth = state.selectedCharacter?.health || 100;
     const opponentBaseHealth = state.opponent?.health || 100;
 
@@ -357,10 +361,10 @@ export const useGameStore = create<GameStore>((set) => ({
     const opponentWins = state.opponentWins + (winner === 'opponent' ? 1 : 0);
 
     // Check if the bout is over (best of 3)
-    if (playerWins === 2 || opponentWins === 2) {
+    if (playerWins >= 2 || opponentWins >= 2) {
       const isFinalStage = state.gauntletStage >= state.gauntletOpponents.length - 1;
       // Player loss ends the run; a win either clears the stage or wins it all.
-      const gameStatus = opponentWins === 2 ? 'lost' : isFinalStage ? 'champion' : 'won';
+      const gameStatus = opponentWins >= 2 ? 'lost' : isFinalStage ? 'champion' : 'won';
 
       set({
         playerWins,
