@@ -88,6 +88,11 @@ const shuffle = <T,>(arr: T[]): T[] => {
 
 const randomStageId = () => stages[Math.floor(Math.random() * stages.length)].id;
 
+// Peak of the jump arc, in px. The arena scales this down when a short
+// viewport can't fit the whole arc (see jumpScale in GameArena).
+export const JUMP_PEAK = 230;
+const JUMP_STEP = 16;
+
 // State shared by startGauntlet / advanceGauntlet when a fresh bout begins.
 // Bouts open on the 'intro' VS screen; the arena starts the countdown after it.
 const freshBout = () => ({
@@ -241,19 +246,19 @@ export const useGameStore = create<GameStore>((set) => ({
       // Smooth jump animation
       let jumpHeight = 0;
       const jumpUp = setInterval(() => {
-        if (jumpHeight >= 230) {
+        if (jumpHeight >= JUMP_PEAK) {
           clearInterval(jumpUp);
           const fallDown = setInterval(() => {
             if (jumpHeight <= 0) {
               clearInterval(fallDown);
               set({ isJumping: false });
             } else {
-              jumpHeight -= 16;
+              jumpHeight -= JUMP_STEP;
               set({ playerY: jumpHeight });
             }
           }, 16);
         } else {
-          jumpHeight += 16;
+          jumpHeight += JUMP_STEP;
           set({ playerY: jumpHeight });
         }
       }, 16);

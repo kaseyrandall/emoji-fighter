@@ -3,10 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import ReactGA from 'react-ga4';
 import { motion, AnimatePresence, useAnimationControls } from 'framer-motion';
 import UIFx from 'uifx';
-import { useGameStore } from '../store/gameStore';
+import { useGameStore, JUMP_PEAK } from '../store/gameStore';
 import { Pause, Play, RotateCcw, Swords } from 'lucide-react';
 import { stages } from '../data/stages';
 import Joystick from '../components/Joystick';
+
+// The store animates a jump to a fixed peak (see JUMP_PEAK in gameStore). On a
+// short landscape phone that arc carries the fighter off the top of the screen,
+// so the arena scales it to the headroom it actually has. playerY is purely
+// presentational — nothing in hit detection reads it — so scaling only changes
+// how high the hop looks, never whether an attack lands.
 
 interface FloatingHit {
   id: number;
@@ -85,6 +91,45 @@ export default function GameArena() {
   const [floatingHits, setFloatingHits] = useState<FloatingHit[]>([]);
   const [flash, setFlash] = useState<'player' | 'opponent' | null>(null);
   const lastHitSeq = useRef<number>(0);
+  const arenaRef = useRef<HTMLDivElement>(null);
+  const fighterRef = useRef<HTMLDivElement>(null);
+  const [jumpScale, setJumpScale] = useState(1);
+
+  // Measure how far the fighter can rise before its head leaves the arena (the
+  // arena's top edge is the underside of the HUD). Both terms are independent
+  // of the fighter's current offset, so a resize or rotation mid-jump still
+  // measures the resting geometry.
+  React.useLayoutEffect(() => {
+    const arena = arenaRef.current;
+    const fighter = fighterRef.current;
+    if (!arena || !fighter) return;
+
+    const measure = () => {
+      // Skip until both boxes are laid out, otherwise we'd latch a scale
+      // derived from a zero height and the jump would flatten.
+      if (!arena.clientHeight || !fighter.offsetHeight) return;
+      const cs = getComputedStyle(arena);
+      const contentHeight =
+        arena.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+      const headroom = contentHeight - fighter.offsetHeight - 4;
+      setJumpScale(Math.max(0, Math.min(1, headroom / JUMP_PEAK)));
+    };
+
+    // Observing both boxes re-measures when either settles — the emoji resizes
+    // at the sm/lg breakpoints and once its font loads, and the observer fires
+    // on observe(), so the first reading is taken after layout rather than
+    // during it.
+    const ro = new ResizeObserver(measure);
+    ro.observe(arena);
+    ro.observe(fighter);
+    window.addEventListener('resize', measure);
+    window.addEventListener('orientationchange', measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('orientationchange', measure);
+    };
+  }, [gameStatus, selectedCharacter?.emoji]);
 
   useEffect(() => {
     if (!hitEvent) return;
@@ -374,7 +419,7 @@ export default function GameArena() {
       {/* Arena — the bottom inset sets the fighters' ground line. It keeps them
           standing back on the stage floor instead of at its front lip, and on
           touch layouts it lifts them clear of the joystick and attack pads. */}
-      <div className="relative flex-1 w-full flex flex-col justify-end pb-10 lg:pb-16">
+      <div ref={arenaRef} className="relative flex-1 w-full flex flex-col justify-end pb-10 lg:pb-16">
         {/* Floor */}
         <div className={`absolute bottom-0 w-full h-48 ${stage?.floorColor}`} />
         
@@ -402,10 +447,11 @@ export default function GameArena() {
           </AnimatePresence>
 
           <motion.div
+            ref={fighterRef}
             className="text-[5.5rem] sm:text-[6.5rem] lg:text-[9rem] absolute"
             style={{
               left: `${playerPosition}%`,
-              bottom: `${playerY}px`,
+              bottom: `${playerY * jumpScale}px`,
               transition: 'bottom 0.08s linear',
               filter: flash === 'player'
                 ? 'brightness(1.9) drop-shadow(0 0 22px rgba(255,40,40,0.95))'
