@@ -64,8 +64,7 @@ export default function Credits({ onClose }: CreditsProps) {
                 href="https://kaseyrandall.design"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-1.5 inline-flex items-center gap-1.5 rounded-md bg-white/10 hover:bg-white/20
-                         px-2.5 py-1 text-xs font-semibold text-indigo-300 hover:text-indigo-200 transition-colors"
+                className="mt-1 inline-flex items-center gap-1.5 text-xs text-indigo-300 hover:text-indigo-200 hover:underline"
               >
                 <Globe size={13} className="shrink-0" />
                 kaseyrandall.design
