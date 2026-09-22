@@ -61,11 +61,13 @@ export default function GameArena() {
     startCountdown,
     timer,
     round,
+    roundLoser,
     playerWins,
     opponentWins,
     playerPosition,
     playerY,
     opponentPosition,
+    opponentY,
     isOpponentAttacking,
     hitEvent,
     gauntletStage,
@@ -94,7 +96,11 @@ export default function GameArena() {
   const arenaControls = useAnimationControls();
   const [floatingHits, setFloatingHits] = useState<FloatingHit[]>([]);
   const [flash, setFlash] = useState<'player' | 'opponent' | null>(null);
+  // Special-cast VFX: an expanding shockwave at the player + a brief screen flash.
+  const [specialBurst, setSpecialBurst] = useState<{ id: number; x: number; y: number } | null>(null);
+  const [castFlash, setCastFlash] = useState(false);
   const lastHitSeq = useRef<number>(0);
+  const hitTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const arenaRef = useRef<HTMLDivElement>(null);
   const fighterRef = useRef<HTMLDivElement>(null);
   const [jumpScale, setJumpScale] = useState(1);
@@ -156,31 +162,65 @@ export default function GameArena() {
       transition: { duration: special ? 0.4 : 0.25 }
     });
 
-    // Red flash on the struck fighter
-    setFlash(hitEvent.target);
-    const flashTimer = setTimeout(() => setFlash(null), 150);
+    // Red flash on the struck fighter. Clear only if this same flash is still
+    // showing, so a newer hit on the other fighter isn't wiped early.
+    const target = hitEvent.target;
+    setFlash(target);
+    const flashTimer = setTimeout(() => setFlash(f => (f === target ? null : f)), 150);
 
     // Floating damage number on the struck fighter — keep only the latest per
     // fighter so rapid hits replace rather than pile up into an unreadable smear.
-    const x = hitEvent.target === 'player' ? playerPosition : opponentPosition;
-    const fh: FloatingHit = { id: hitEvent.seq, amount: hitEvent.amount, target: hitEvent.target, x, special };
+    const x = target === 'player' ? playerPosition : opponentPosition;
+    const fh: FloatingHit = { id: hitEvent.seq, amount: hitEvent.amount, target, x, special };
     setFloatingHits(prev => [...prev.filter(h => h.target !== fh.target), fh]);
+    // Each number removes itself by id. Crucially this timer is NOT cleared when
+    // the next hit lands: a following hit on the OTHER fighter would otherwise
+    // cancel this removal and leave the number stuck on screen across rounds.
     const numTimer = setTimeout(() => {
       setFloatingHits(prev => prev.filter(h => h.id !== fh.id));
     }, 550);
-
-    return () => {
-      clearTimeout(flashTimer);
-      clearTimeout(numTimer);
-    };
+    hitTimers.current.push(flashTimer, numTimer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hitEvent?.seq]);
+
+  // Clear any pending hit timers on unmount, and wipe leftover VFX whenever a
+  // fresh round or match begins so nothing carries over.
+  useEffect(() => () => { hitTimers.current.forEach(clearTimeout); hitTimers.current = []; }, []);
+  useEffect(() => {
+    if (gameStatus === 'intro' || gameStatus === 'ready') {
+      setFloatingHits([]);
+      setFlash(null);
+    }
+  }, [gameStatus]);
+
+  // Fire the special-cast burst when the player launches a special.
+  useEffect(() => {
+    if (currentMove !== 'special') return;
+    const s = useGameStore.getState();
+    const id = Date.now();
+    setSpecialBurst({ id, x: s.playerPosition, y: s.playerY * jumpScale });
+    setCastFlash(true);
+    const t1 = setTimeout(() => setCastFlash(false), 220);
+    const t2 = setTimeout(() => setSpecialBurst(b => (b && b.id === id ? null : b)), 800);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentMove]);
 
   const getPlayerAnimation = () => {
     // Face the last-moved direction: default facing "right" is the flipped emoji.
     const facX = playerFacing === 'right' ? -1 : 1;
 
-    if (!isAttacking) return { scaleX: facX };
+    // KO beat: the loser topples, the winner does a little victory hop.
+    if (gameStatus === 'roundEnd') {
+      if (roundLoser === 'player') {
+        return { scaleX: facX, rotate: -78, y: 28, opacity: 0.7, transition: { duration: 0.5, ease: 'backOut' } };
+      }
+      return { scaleX: facX, y: [0, -20, 0], transition: { duration: 0.5, repeat: 2, ease: 'easeOut' } };
+    }
+
+    // Explicitly reset rotate/y/opacity here: once the KO pose sets them, an
+    // animation target that omits them would leave the fighter stuck toppled.
+    if (!isAttacking) return { scaleX: facX, rotate: 0, y: 0, opacity: 1 };
 
     const duration = 0.4;
 
@@ -189,12 +229,16 @@ export default function GameArena() {
         return {
           scaleX: facX,
           rotate: [0, -15, 0],
+          y: 0,
+          opacity: 1,
           transition: { duration }
         };
       case 'kick':
         return {
           scaleX: facX,
           rotate: [0, 45, 0],
+          y: 0,
+          opacity: 1,
           transition: { duration }
         };
       case 'special':
@@ -202,18 +246,32 @@ export default function GameArena() {
           scaleX: facX,
           scaleY: [1, 1.2, 1],
           rotate: [0, 45, 0],
+          y: 0,
+          opacity: 1,
           transition: { duration: 0.6 }
         };
       default:
-        return { scaleX: facX };
+        return { scaleX: facX, rotate: 0, y: 0, opacity: 1 };
     }
   };
 
   const getOpponentAnimation = () => {
-    if (!isOpponentAttacking) return {};
-    
+    // KO beat: the loser topples, the winner does a little victory hop.
+    if (gameStatus === 'roundEnd') {
+      if (roundLoser === 'opponent') {
+        return { rotate: 78, y: 28, opacity: 0.7, transition: { duration: 0.5, ease: 'backOut' } };
+      }
+      return { y: [0, -20, 0], transition: { duration: 0.5, repeat: 2, ease: 'easeOut' } };
+    }
+
+    // Reset rotate/y/opacity so a fighter that toppled on a KO stands back up
+    // for the next round / match instead of staying rotated.
+    if (!isOpponentAttacking) return { rotate: 0, y: 0, opacity: 1 };
+
     return {
       rotate: [0, -20, 0],
+      y: 0,
+      opacity: 1,
       transition: { duration: 0.4 }
     };
   };
@@ -475,13 +533,40 @@ export default function GameArena() {
               ease: currentMove === 'special' ? "backOut" : "easeInOut"
             }}
           >
+            {/* Charged aura — a pulsing halo while the super meter is full. */}
+            {specialReady && (
+              <>
+                <motion.span
+                  className="absolute left-1/2 top-1/2 rounded-full pointer-events-none"
+                  style={{ width: '1.15em', height: '1.15em', x: '-50%', y: '-50%',
+                    background: 'radial-gradient(circle, rgba(216,180,254,0.55), rgba(168,85,247,0.15) 55%, transparent 72%)' }}
+                  animate={{ scale: [1, 1.28, 1], opacity: [0.65, 1, 0.65] }}
+                  transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
+                />
+                {[0, 1, 2].map((i) => (
+                  <motion.span
+                    key={i}
+                    className="absolute left-1/2 top-1/2 text-[0.22em] pointer-events-none"
+                    style={{ x: '-50%', y: '-50%' }}
+                    animate={{
+                      rotate: [i * 120, i * 120 + 360],
+                      opacity: [0.4, 1, 0.4],
+                    }}
+                    transition={{ duration: 2.4, repeat: Infinity, ease: 'linear' }}
+                  >
+                    <span className="inline-block" style={{ transform: 'translateY(-0.75em)' }}>✨</span>
+                  </motion.span>
+                ))}
+              </>
+            )}
             {selectedCharacter.emoji}
           </motion.div>
           <motion.div
             className="text-[5.5rem] sm:text-[6.5rem] lg:text-[9rem] absolute"
             style={{
               left: `${opponentPosition}%`,
-              transition: 'left 0.2s ease-out',
+              bottom: `${opponentY * jumpScale}px`,
+              transition: 'left 0.2s ease-out, bottom 0.08s linear',
               filter: flash === 'opponent'
                 ? 'brightness(1.9) drop-shadow(0 0 22px rgba(255,40,40,0.95))'
                 : 'drop-shadow(0 0 15px rgba(255,255,255,0.5))'
@@ -494,8 +579,95 @@ export default function GameArena() {
           >
             {opponent.emoji}
           </motion.div>
+
+          {/* Special-cast shockwave + sparkle burst at the player. */}
+          <AnimatePresence>
+            {specialBurst && (
+              <div
+                key={specialBurst.id}
+                className="absolute pointer-events-none z-10"
+                style={{ left: `${specialBurst.x}%`, bottom: `${specialBurst.y + 44}px`, transform: 'translateX(-10%)' }}
+              >
+                {/* expanding rings */}
+                {[0, 1].map((i) => (
+                  <motion.span
+                    key={i}
+                    className="absolute rounded-full"
+                    style={{ left: 0, top: 0, x: '-50%', y: '-50%', border: '3px solid rgba(216,180,254,0.9)' }}
+                    initial={{ width: 12, height: 12, opacity: 0.9 }}
+                    animate={{ width: 150 + i * 60, height: 150 + i * 60, opacity: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.55, ease: 'easeOut', delay: i * 0.08 }}
+                  />
+                ))}
+                {/* core flash */}
+                <motion.span
+                  className="absolute rounded-full"
+                  style={{ left: 0, top: 0, x: '-50%', y: '-50%',
+                    background: 'radial-gradient(circle, rgba(255,255,255,0.95), rgba(216,180,254,0.6) 45%, transparent 70%)' }}
+                  initial={{ width: 70, height: 70, opacity: 0.95 }}
+                  animate={{ width: 20, height: 20, opacity: 0 }}
+                  transition={{ duration: 0.35, ease: 'easeOut' }}
+                />
+                {/* sparkle particles flying outward */}
+                {[0, 60, 120, 180, 240, 300].map((deg) => (
+                  <motion.span
+                    key={deg}
+                    className="absolute text-xl lg:text-2xl"
+                    style={{ left: 0, top: 0 }}
+                    initial={{ x: '-50%', y: '-50%', opacity: 1, scale: 0.6 }}
+                    animate={{
+                      x: `calc(-50% + ${Math.cos((deg * Math.PI) / 180) * 70}px)`,
+                      y: `calc(-50% + ${Math.sin((deg * Math.PI) / 180) * 70}px)`,
+                      opacity: 0,
+                      scale: 1.1,
+                    }}
+                    transition={{ duration: 0.6, ease: 'easeOut' }}
+                  >
+                    ✨
+                  </motion.span>
+                ))}
+              </div>
+            )}
+          </AnimatePresence>
         </motion.div>
       </div>
+
+      {/* Brief purple wash when a special is cast. */}
+      <AnimatePresence>
+        {castFlash && (
+          <motion.div
+            className="fixed inset-0 pointer-events-none z-30"
+            style={{ background: 'radial-gradient(circle at 50% 60%, rgba(216,180,254,0.35), transparent 65%)' }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* KO beat between a round ending and the next round / result screen. */}
+      {gameStatus === 'roundEnd' && (
+        <div className="fixed inset-0 pointer-events-none z-30 flex flex-col items-center justify-center px-4">
+          <motion.div
+            initial={{ scale: 0.3, opacity: 0, rotate: -12 }}
+            animate={{ scale: 1, opacity: 1, rotate: 0 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 13 }}
+            className="font-arcade text-5xl sm:text-7xl text-red-500 drop-shadow-[0_0_20px_rgba(255,0,0,0.75)] tracking-widest"
+          >
+            K.O.
+          </motion.div>
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.28 }}
+            className="mt-2 text-white text-sm sm:text-lg font-bold text-center drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]"
+          >
+            {(roundLoser === 'player' ? opponent.name : selectedCharacter.name)} wins Round {round}
+          </motion.div>
+        </div>
+      )}
 
       {/* VS intro / loading screen shown before each gauntlet bout */}
       {gameStatus === 'intro' && (
