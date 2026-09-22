@@ -66,6 +66,7 @@ export default function GameArena() {
     playerPosition,
     playerY,
     opponentPosition,
+    opponentY,
     isOpponentAttacking,
     hitEvent,
     gauntletStage,
@@ -94,6 +95,9 @@ export default function GameArena() {
   const arenaControls = useAnimationControls();
   const [floatingHits, setFloatingHits] = useState<FloatingHit[]>([]);
   const [flash, setFlash] = useState<'player' | 'opponent' | null>(null);
+  // Special-cast VFX: an expanding shockwave at the player + a brief screen flash.
+  const [specialBurst, setSpecialBurst] = useState<{ id: number; x: number; y: number } | null>(null);
+  const [castFlash, setCastFlash] = useState(false);
   const lastHitSeq = useRef<number>(0);
   const arenaRef = useRef<HTMLDivElement>(null);
   const fighterRef = useRef<HTMLDivElement>(null);
@@ -175,6 +179,19 @@ export default function GameArena() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hitEvent?.seq]);
+
+  // Fire the special-cast burst when the player launches a special.
+  useEffect(() => {
+    if (currentMove !== 'special') return;
+    const s = useGameStore.getState();
+    const id = Date.now();
+    setSpecialBurst({ id, x: s.playerPosition, y: s.playerY * jumpScale });
+    setCastFlash(true);
+    const t1 = setTimeout(() => setCastFlash(false), 220);
+    const t2 = setTimeout(() => setSpecialBurst(b => (b && b.id === id ? null : b)), 800);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentMove]);
 
   const getPlayerAnimation = () => {
     // Face the last-moved direction: default facing "right" is the flipped emoji.
@@ -475,13 +492,40 @@ export default function GameArena() {
               ease: currentMove === 'special' ? "backOut" : "easeInOut"
             }}
           >
+            {/* Charged aura — a pulsing halo while the super meter is full. */}
+            {specialReady && (
+              <>
+                <motion.span
+                  className="absolute left-1/2 top-1/2 rounded-full pointer-events-none"
+                  style={{ width: '1.15em', height: '1.15em', x: '-50%', y: '-50%',
+                    background: 'radial-gradient(circle, rgba(216,180,254,0.55), rgba(168,85,247,0.15) 55%, transparent 72%)' }}
+                  animate={{ scale: [1, 1.28, 1], opacity: [0.65, 1, 0.65] }}
+                  transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
+                />
+                {[0, 1, 2].map((i) => (
+                  <motion.span
+                    key={i}
+                    className="absolute left-1/2 top-1/2 text-[0.22em] pointer-events-none"
+                    style={{ x: '-50%', y: '-50%' }}
+                    animate={{
+                      rotate: [i * 120, i * 120 + 360],
+                      opacity: [0.4, 1, 0.4],
+                    }}
+                    transition={{ duration: 2.4, repeat: Infinity, ease: 'linear' }}
+                  >
+                    <span className="inline-block" style={{ transform: 'translateY(-0.75em)' }}>✨</span>
+                  </motion.span>
+                ))}
+              </>
+            )}
             {selectedCharacter.emoji}
           </motion.div>
           <motion.div
             className="text-[5.5rem] sm:text-[6.5rem] lg:text-[9rem] absolute"
             style={{
               left: `${opponentPosition}%`,
-              transition: 'left 0.2s ease-out',
+              bottom: `${opponentY * jumpScale}px`,
+              transition: 'left 0.2s ease-out, bottom 0.08s linear',
               filter: flash === 'opponent'
                 ? 'brightness(1.9) drop-shadow(0 0 22px rgba(255,40,40,0.95))'
                 : 'drop-shadow(0 0 15px rgba(255,255,255,0.5))'
@@ -494,8 +538,73 @@ export default function GameArena() {
           >
             {opponent.emoji}
           </motion.div>
+
+          {/* Special-cast shockwave + sparkle burst at the player. */}
+          <AnimatePresence>
+            {specialBurst && (
+              <div
+                key={specialBurst.id}
+                className="absolute pointer-events-none z-10"
+                style={{ left: `${specialBurst.x}%`, bottom: `${specialBurst.y + 44}px`, transform: 'translateX(-10%)' }}
+              >
+                {/* expanding rings */}
+                {[0, 1].map((i) => (
+                  <motion.span
+                    key={i}
+                    className="absolute rounded-full"
+                    style={{ left: 0, top: 0, x: '-50%', y: '-50%', border: '3px solid rgba(216,180,254,0.9)' }}
+                    initial={{ width: 12, height: 12, opacity: 0.9 }}
+                    animate={{ width: 150 + i * 60, height: 150 + i * 60, opacity: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.55, ease: 'easeOut', delay: i * 0.08 }}
+                  />
+                ))}
+                {/* core flash */}
+                <motion.span
+                  className="absolute rounded-full"
+                  style={{ left: 0, top: 0, x: '-50%', y: '-50%',
+                    background: 'radial-gradient(circle, rgba(255,255,255,0.95), rgba(216,180,254,0.6) 45%, transparent 70%)' }}
+                  initial={{ width: 70, height: 70, opacity: 0.95 }}
+                  animate={{ width: 20, height: 20, opacity: 0 }}
+                  transition={{ duration: 0.35, ease: 'easeOut' }}
+                />
+                {/* sparkle particles flying outward */}
+                {[0, 60, 120, 180, 240, 300].map((deg) => (
+                  <motion.span
+                    key={deg}
+                    className="absolute text-xl lg:text-2xl"
+                    style={{ left: 0, top: 0 }}
+                    initial={{ x: '-50%', y: '-50%', opacity: 1, scale: 0.6 }}
+                    animate={{
+                      x: `calc(-50% + ${Math.cos((deg * Math.PI) / 180) * 70}px)`,
+                      y: `calc(-50% + ${Math.sin((deg * Math.PI) / 180) * 70}px)`,
+                      opacity: 0,
+                      scale: 1.1,
+                    }}
+                    transition={{ duration: 0.6, ease: 'easeOut' }}
+                  >
+                    ✨
+                  </motion.span>
+                ))}
+              </div>
+            )}
+          </AnimatePresence>
         </motion.div>
       </div>
+
+      {/* Brief purple wash when a special is cast. */}
+      <AnimatePresence>
+        {castFlash && (
+          <motion.div
+            className="fixed inset-0 pointer-events-none z-30"
+            style={{ background: 'radial-gradient(circle at 50% 60%, rgba(216,180,254,0.35), transparent 65%)' }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+          />
+        )}
+      </AnimatePresence>
 
       {/* VS intro / loading screen shown before each gauntlet bout */}
       {gameStatus === 'intro' && (

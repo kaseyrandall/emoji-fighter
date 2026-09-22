@@ -32,9 +32,16 @@ let aiLoop: ReturnType<typeof setInterval> | undefined;
 let physicsLoop: ReturnType<typeof setInterval> | undefined;
 let countdownLoop: ReturnType<typeof setInterval> | undefined;
 let roundTimerLoop: ReturnType<typeof setInterval> | undefined;
+// Jump arcs run on their own intervals; tracked so a round that ends mid-jump
+// can stop them, otherwise a leaked arc keeps writing playerY/opponentY and the
+// fighter visibly bounces during the next round's countdown.
+let playerJumpLoop: ReturnType<typeof setInterval> | undefined;
+let oppJumpLoop: ReturnType<typeof setInterval> | undefined;
 const clearRoundLoops = () => {
   if (countdownLoop) { clearInterval(countdownLoop); countdownLoop = undefined; }
   if (roundTimerLoop) { clearInterval(roundTimerLoop); roundTimerLoop = undefined; }
+  if (playerJumpLoop) { clearInterval(playerJumpLoop); playerJumpLoop = undefined; }
+  if (oppJumpLoop) { clearInterval(oppJumpLoop); oppJumpLoop = undefined; }
 };
 
 // Recovery between the player's own attacks, so mashing can't stack hits and
@@ -243,24 +250,24 @@ export const useGameStore = create<GameStore>((set) => ({
     if (move === 'jump' && !state.isJumping) {
       set({ isJumping: true });
 
-      // Smooth jump animation
-      let jumpHeight = 0;
-      const jumpUp = setInterval(() => {
-        if (jumpHeight >= JUMP_PEAK) {
-          clearInterval(jumpUp);
-          const fallDown = setInterval(() => {
-            if (jumpHeight <= 0) {
-              clearInterval(fallDown);
-              set({ isJumping: false });
-            } else {
-              jumpHeight -= JUMP_STEP;
-              set({ playerY: jumpHeight });
-            }
-          }, 16);
-        } else {
-          jumpHeight += JUMP_STEP;
-          set({ playerY: jumpHeight });
+      // One tracked arc (up then down). It bails if the round ends mid-jump so
+      // it can't keep writing playerY into the next round's reset.
+      if (playerJumpLoop) clearInterval(playerJumpLoop);
+      let h = 0;
+      let dir = 1;
+      playerJumpLoop = setInterval(() => {
+        if (useGameStore.getState().gameStatus !== 'playing') {
+          if (playerJumpLoop) { clearInterval(playerJumpLoop); playerJumpLoop = undefined; }
+          return;
         }
+        h += dir * JUMP_STEP;
+        if (h >= JUMP_PEAK) { h = JUMP_PEAK; dir = -1; }
+        if (h <= 0) {
+          if (playerJumpLoop) { clearInterval(playerJumpLoop); playerJumpLoop = undefined; }
+          set({ playerY: 0, isJumping: false });
+          return;
+        }
+        set({ playerY: h });
       }, 16);
 
       return;
@@ -370,6 +377,30 @@ export const useGameStore = create<GameStore>((set) => ({
     aiLastAttackAt = 0;
     aiEnteredRangeAt = 0;
 
+    // A tracked arc for the opponent, mirroring the player's jump. Guarded so
+    // only one runs at a time and it stops if the round ends mid-air.
+    const OPP_JUMP_PEAK = JUMP_PEAK * 0.85;
+    const startOppJump = () => {
+      if (oppJumpLoop) return; // already airborne
+      let h = 0;
+      let dir = 1;
+      oppJumpLoop = setInterval(() => {
+        if (useGameStore.getState().gameStatus !== 'playing') {
+          if (oppJumpLoop) { clearInterval(oppJumpLoop); oppJumpLoop = undefined; }
+          set({ opponentY: 0 });
+          return;
+        }
+        h += dir * JUMP_STEP;
+        if (h >= OPP_JUMP_PEAK) { h = OPP_JUMP_PEAK; dir = -1; }
+        if (h <= 0) {
+          if (oppJumpLoop) { clearInterval(oppJumpLoop); oppJumpLoop = undefined; }
+          set({ opponentY: 0 });
+          return;
+        }
+        set({ opponentY: h });
+      }, 16);
+    };
+
     const runAI = () => {
       const state = useGameStore.getState();
       if (state.gameStatus !== 'playing') {
@@ -377,21 +408,26 @@ export const useGameStore = create<GameStore>((set) => ({
         return;
       }
 
-      const diff = difficultyForStage(state.gauntletStage + DIFF_OFFSET[state.difficulty]);
+      const stage = state.gauntletStage + DIFF_OFFSET[state.difficulty];
+      const diff = difficultyForStage(stage);
       const distance = Math.abs(state.playerPosition - state.opponentPosition);
+      const airborne = !!oppJumpLoop;
+      // Jump aggression scales with difficulty; per 50ms tick.
+      const jumpChance = Math.min(0.06, 0.015 + stage * 0.006);
+      const playerAirborne = state.playerY > JUMP_PEAK * 0.35;
 
       // Move towards player if too far
       if (distance > HIT_RANGE) {
         aiEnteredRangeAt = 0; // out of range — reset the reaction timer
+        const step = diff.moveSpeed;
         if (state.playerPosition < state.opponentPosition) {
-          set(state => ({
-            opponentPosition: Math.max(POS_MIN, state.opponentPosition - diff.moveSpeed)
-          }));
+          set(s => ({ opponentPosition: Math.max(POS_MIN, s.opponentPosition - step) }));
         } else {
-          set(state => ({
-            opponentPosition: Math.min(POS_MAX, state.opponentPosition + diff.moveSpeed)
-          }));
+          set(s => ({ opponentPosition: Math.min(POS_MAX, s.opponentPosition + step) }));
         }
+        // Hop forward now and then while closing — reads as an aggressive
+        // approach, and a jump-in can lead straight into an attack on landing.
+        if (!airborne && distance < 45 && Math.random() < jumpChance) startOppJump();
         return;
       }
 
@@ -402,9 +438,17 @@ export const useGameStore = create<GameStore>((set) => ({
       const reacted = now - aiEnteredRangeAt >= diff.reactionMs;
       const offCooldown = now - aiLastAttackAt >= diff.cooldownMs;
 
+      // React to the player leaping: contest the air / anti-air by jumping too.
+      if (!airborne && playerAirborne && Math.random() < jumpChance * 2) {
+        startOppJump();
+      }
+
       if (reacted && offCooldown && !state.isOpponentAttacking && Math.random() < diff.attackChance) {
         aiLastAttackAt = now;
         useGameStore.getState().opponentAttack();
+      } else if (!airborne && reacted && offCooldown && Math.random() < jumpChance * 0.6) {
+        // Occasionally hop in place to reposition instead of trading blows.
+        startOppJump();
       }
     };
 
