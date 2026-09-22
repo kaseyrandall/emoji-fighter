@@ -4,9 +4,10 @@ import ReactGA from 'react-ga4';
 import { motion, AnimatePresence, useAnimationControls } from 'framer-motion';
 import UIFx from 'uifx';
 import { useGameStore, JUMP_PEAK } from '../store/gameStore';
-import { Pause, Play, RotateCcw, Swords } from 'lucide-react';
+import { Pause, Play, RotateCcw, Swords, Info } from 'lucide-react';
 import { stages } from '../data/stages';
 import Joystick from '../components/Joystick';
+import Credits from '../components/Credits';
 
 // The store animates a jump to a fixed peak (see JUMP_PEAK in gameStore). On a
 // short landscape phone that arc carries the fighter off the top of the screen,
@@ -81,6 +82,9 @@ export default function GameArena() {
 
   // Super meter: charged by landing punches/kicks; the special fires only when full.
   const specialReady = specialMeter >= 100;
+  // The charged aura / glow should only pulse during live play — not linger on
+  // the pause, KO or result screens.
+  const chargedGlow = specialReady && gameStatus === 'playing';
   const useSpecial = () => {
     const s = useGameStore.getState();
     if (s.gameStatus === 'playing' && s.specialMeter >= 100) {
@@ -99,6 +103,7 @@ export default function GameArena() {
   // Special-cast VFX: an expanding shockwave at the player + a brief screen flash.
   const [specialBurst, setSpecialBurst] = useState<{ id: number; x: number; y: number } | null>(null);
   const [castFlash, setCastFlash] = useState(false);
+  const [showCredits, setShowCredits] = useState(false);
   const lastHitSeq = useRef<number>(0);
   const hitTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const arenaRef = useRef<HTMLDivElement>(null);
@@ -190,19 +195,24 @@ export default function GameArena() {
     if (gameStatus === 'intro' || gameStatus === 'ready') {
       setFloatingHits([]);
       setFlash(null);
+      setCastFlash(false);
+      setSpecialBurst(null);
     }
   }, [gameStatus]);
 
-  // Fire the special-cast burst when the player launches a special.
+  // Fire the special-cast burst when the player launches a special. Timers are
+  // NOT cancelled on re-run (currentMove flips back to null at 600ms), so the
+  // flash/burst always clear themselves instead of lingering on screen.
   useEffect(() => {
     if (currentMove !== 'special') return;
     const s = useGameStore.getState();
     const id = Date.now();
     setSpecialBurst({ id, x: s.playerPosition, y: s.playerY * jumpScale });
     setCastFlash(true);
-    const t1 = setTimeout(() => setCastFlash(false), 220);
-    const t2 = setTimeout(() => setSpecialBurst(b => (b && b.id === id ? null : b)), 800);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
+    hitTimers.current.push(
+      setTimeout(() => setCastFlash(false), 220),
+      setTimeout(() => setSpecialBurst(b => (b && b.id === id ? null : b)), 800)
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentMove]);
 
@@ -523,7 +533,7 @@ export default function GameArena() {
               transition: 'bottom 0.08s linear',
               filter: flash === 'player'
                 ? 'brightness(1.9) drop-shadow(0 0 22px rgba(255,40,40,0.95))'
-                : specialReady
+                : chargedGlow
                 ? 'drop-shadow(0 0 22px rgba(216,180,254,0.9))'
                 : 'drop-shadow(0 0 15px rgba(255,255,255,0.5))'
             }}
@@ -534,7 +544,7 @@ export default function GameArena() {
             }}
           >
             {/* Charged aura — a pulsing halo while the super meter is full. */}
-            {specialReady && (
+            {chargedGlow && (
               <>
                 <motion.span
                   className="absolute left-1/2 top-1/2 rounded-full pointer-events-none"
@@ -635,7 +645,7 @@ export default function GameArena() {
 
       {/* Brief purple wash when a special is cast. */}
       <AnimatePresence>
-        {castFlash && (
+        {castFlash && gameStatus === 'playing' && (
           <motion.div
             className="fixed inset-0 pointer-events-none z-30"
             style={{ background: 'radial-gradient(circle at 50% 60%, rgba(216,180,254,0.35), transparent 65%)' }}
@@ -798,6 +808,13 @@ export default function GameArena() {
                     <RotateCcw size={20} />
                     Quit
                   </button>
+                  <button
+                    onClick={() => setShowCredits(true)}
+                    className="px-6 py-2 text-gray-300 hover:text-white transition-colors flex items-center justify-center gap-2 text-sm font-semibold"
+                  >
+                    <Info size={16} />
+                    Credits
+                  </button>
                 </>
               )}
               {gameStatus === 'won' && (
@@ -876,6 +893,10 @@ export default function GameArena() {
           </div>
         </div>
       )}
+
+      <AnimatePresence>
+        {showCredits && <Credits onClose={() => setShowCredits(false)} />}
+      </AnimatePresence>
     </div>
   );
 }
