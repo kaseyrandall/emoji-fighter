@@ -206,7 +206,9 @@ export default function GameArena() {
       return { scaleX: facX, y: [0, -20, 0], transition: { duration: 0.5, repeat: 2, ease: 'easeOut' } };
     }
 
-    if (!isAttacking) return { scaleX: facX };
+    // Explicitly reset rotate/y/opacity here: once the KO pose sets them, an
+    // animation target that omits them would leave the fighter stuck toppled.
+    if (!isAttacking) return { scaleX: facX, rotate: 0, y: 0, opacity: 1 };
 
     const duration = 0.4;
 
@@ -215,12 +217,16 @@ export default function GameArena() {
         return {
           scaleX: facX,
           rotate: [0, -15, 0],
+          y: 0,
+          opacity: 1,
           transition: { duration }
         };
       case 'kick':
         return {
           scaleX: facX,
           rotate: [0, 45, 0],
+          y: 0,
+          opacity: 1,
           transition: { duration }
         };
       case 'special':
@@ -228,10 +234,12 @@ export default function GameArena() {
           scaleX: facX,
           scaleY: [1, 1.2, 1],
           rotate: [0, 45, 0],
+          y: 0,
+          opacity: 1,
           transition: { duration: 0.6 }
         };
       default:
-        return { scaleX: facX };
+        return { scaleX: facX, rotate: 0, y: 0, opacity: 1 };
     }
   };
 
@@ -244,10 +252,14 @@ export default function GameArena() {
       return { y: [0, -20, 0], transition: { duration: 0.5, repeat: 2, ease: 'easeOut' } };
     }
 
-    if (!isOpponentAttacking) return {};
+    // Reset rotate/y/opacity so a fighter that toppled on a KO stands back up
+    // for the next round / match instead of staying rotated.
+    if (!isOpponentAttacking) return { rotate: 0, y: 0, opacity: 1 };
 
     return {
       rotate: [0, -20, 0],
+      y: 0,
+      opacity: 1,
       transition: { duration: 0.4 }
     };
   };
