@@ -61,6 +61,7 @@ export default function GameArena() {
     startCountdown,
     timer,
     round,
+    roundLoser,
     playerWins,
     opponentWins,
     playerPosition,
@@ -197,6 +198,14 @@ export default function GameArena() {
     // Face the last-moved direction: default facing "right" is the flipped emoji.
     const facX = playerFacing === 'right' ? -1 : 1;
 
+    // KO beat: the loser topples, the winner does a little victory hop.
+    if (gameStatus === 'roundEnd') {
+      if (roundLoser === 'player') {
+        return { scaleX: facX, rotate: -78, y: 28, opacity: 0.7, transition: { duration: 0.5, ease: 'backOut' } };
+      }
+      return { scaleX: facX, y: [0, -20, 0], transition: { duration: 0.5, repeat: 2, ease: 'easeOut' } };
+    }
+
     if (!isAttacking) return { scaleX: facX };
 
     const duration = 0.4;
@@ -227,8 +236,16 @@ export default function GameArena() {
   };
 
   const getOpponentAnimation = () => {
+    // KO beat: the loser topples, the winner does a little victory hop.
+    if (gameStatus === 'roundEnd') {
+      if (roundLoser === 'opponent') {
+        return { rotate: 78, y: 28, opacity: 0.7, transition: { duration: 0.5, ease: 'backOut' } };
+      }
+      return { y: [0, -20, 0], transition: { duration: 0.5, repeat: 2, ease: 'easeOut' } };
+    }
+
     if (!isOpponentAttacking) return {};
-    
+
     return {
       rotate: [0, -20, 0],
       transition: { duration: 0.4 }
@@ -605,6 +622,28 @@ export default function GameArena() {
           />
         )}
       </AnimatePresence>
+
+      {/* KO beat between a round ending and the next round / result screen. */}
+      {gameStatus === 'roundEnd' && (
+        <div className="fixed inset-0 pointer-events-none z-30 flex flex-col items-center justify-center px-4">
+          <motion.div
+            initial={{ scale: 0.3, opacity: 0, rotate: -12 }}
+            animate={{ scale: 1, opacity: 1, rotate: 0 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 13 }}
+            className="font-arcade text-5xl sm:text-7xl text-red-500 drop-shadow-[0_0_20px_rgba(255,0,0,0.75)] tracking-widest"
+          >
+            K.O.
+          </motion.div>
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.28 }}
+            className="mt-2 text-white text-sm sm:text-lg font-bold text-center drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]"
+          >
+            {(roundLoser === 'player' ? opponent.name : selectedCharacter.name)} wins Round {round}
+          </motion.div>
+        </div>
+      )}
 
       {/* VS intro / loading screen shown before each gauntlet bout */}
       {gameStatus === 'intro' && (

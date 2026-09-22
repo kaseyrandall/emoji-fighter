@@ -37,11 +37,16 @@ let roundTimerLoop: ReturnType<typeof setInterval> | undefined;
 // fighter visibly bounces during the next round's countdown.
 let playerJumpLoop: ReturnType<typeof setInterval> | undefined;
 let oppJumpLoop: ReturnType<typeof setInterval> | undefined;
+// The KO beat between a round ending and the next round (or the win/lose
+// screen). Tracked so a quit/reset can cancel it.
+let roundEndTimeout: ReturnType<typeof setTimeout> | undefined;
+const KO_DURATION = 1500;
 const clearRoundLoops = () => {
   if (countdownLoop) { clearInterval(countdownLoop); countdownLoop = undefined; }
   if (roundTimerLoop) { clearInterval(roundTimerLoop); roundTimerLoop = undefined; }
   if (playerJumpLoop) { clearInterval(playerJumpLoop); playerJumpLoop = undefined; }
   if (oppJumpLoop) { clearInterval(oppJumpLoop); oppJumpLoop = undefined; }
+  if (roundEndTimeout) { clearTimeout(roundEndTimeout); roundEndTimeout = undefined; }
 };
 
 // Recovery between the player's own attacks, so mashing can't stack hits and
@@ -105,6 +110,7 @@ const JUMP_STEP = 16;
 const freshBout = () => ({
   gameStatus: 'intro' as const,
   round: 1,
+  roundLoser: null,
   countdown: 3,
   timer: 99,
   playerWins: 0,
@@ -162,6 +168,7 @@ export const useGameStore = create<GameStore>((set) => ({
   opponentHealth: 100,
   gameStatus: 'ready',
   round: 1,
+  roundLoser: null,
   gauntletOpponents: [],
   gauntletStage: 0,
   playerPosition: 15,
@@ -539,7 +546,7 @@ export const useGameStore = create<GameStore>((set) => ({
     // (e.g. rapid hits) both resolving the same round and double-counting a win.
     if (state.gameStatus !== 'playing') return;
 
-    // Stop the round timer/countdown immediately; the next bout restarts them.
+    // Stop the round timer/countdown/AI/physics immediately.
     clearRoundLoops();
 
     const baseHealth = state.selectedCharacter?.health || 100;
@@ -548,17 +555,29 @@ export const useGameStore = create<GameStore>((set) => ({
     // Update wins
     const playerWins = state.playerWins + (winner === 'player' ? 1 : 0);
     const opponentWins = state.opponentWins + (winner === 'opponent' ? 1 : 0);
+    const boutOver = playerWins >= 2 || opponentWins >= 2;
 
-    // Check if the bout is over (best of 3)
-    if (playerWins >= 2 || opponentWins >= 2) {
-      const isFinalStage = state.gauntletStage >= state.gauntletOpponents.length - 1;
-      // Player loss ends the run; a win either clears the stage or wins it all.
-      const gameStatus = opponentWins >= 2 ? 'lost' : isFinalStage ? 'champion' : 'won';
+    // Enter the KO beat: freeze the arena on the knockout (positions/health as
+    // they landed), mark the loser so the UI can play a defeat animation, and
+    // cut off any lingering input/attack state.
+    set({
+      playerWins,
+      opponentWins,
+      gameStatus: 'roundEnd',
+      roundLoser: winner === 'player' ? 'opponent' : 'player',
+      isAttacking: false,
+      isOpponentAttacking: false,
+      currentMove: null,
+      moveDir: 0,
+      playerVel: 0,
+      isJumping: false
+    });
 
-      set({
-        playerWins,
-        opponentWins,
-        gameStatus,
+    // After the beat, either roll into the next round or show the bout result.
+    roundEndTimeout = setTimeout(() => {
+      roundEndTimeout = undefined;
+      const common = {
+        roundLoser: null as 'player' | 'opponent' | null,
         playerPosition: 15,
         playerY: 0,
         opponentPosition: 65,
@@ -567,37 +586,30 @@ export const useGameStore = create<GameStore>((set) => ({
         isAttacking: false,
         isOpponentAttacking: false,
         currentMove: null,
-        playerFacing: 'right',
+        playerFacing: 'right' as const,
         moveDir: 0,
         playerVel: 0,
         specialMeter: 0
-      });
-    } else {
-      // Reset for next round
-      set({
-        playerWins,
-        opponentWins,
-        round: state.round + 1,
-        gameStatus: 'ready',
-        countdown: 3,
-        timer: 99,
-        playerHealth: baseHealth,
-        opponentHealth: opponentBaseHealth,
-        playerPosition: 15,
-        playerY: 0,
-        opponentPosition: 65,
-        opponentY: 0,
-        isJumping: false,
-        isAttacking: false,
-        isOpponentAttacking: false,
-        currentMove: null,
-        playerFacing: 'right',
-        moveDir: 0,
-        playerVel: 0,
-        specialMeter: 0
-      });
-      useGameStore.getState().startCountdown();
-    }
+      };
+
+      if (boutOver) {
+        const isFinalStage = state.gauntletStage >= state.gauntletOpponents.length - 1;
+        // Player loss ends the run; a win either clears the stage or wins it all.
+        const gameStatus = opponentWins >= 2 ? 'lost' : isFinalStage ? 'champion' : 'won';
+        set({ gameStatus, ...common });
+      } else {
+        set({
+          round: state.round + 1,
+          gameStatus: 'ready',
+          countdown: 3,
+          timer: 99,
+          playerHealth: baseHealth,
+          opponentHealth: opponentBaseHealth,
+          ...common
+        });
+        useGameStore.getState().startCountdown();
+      }
+    }, KO_DURATION);
   },
 
   resetGame: () => {
@@ -607,6 +619,7 @@ export const useGameStore = create<GameStore>((set) => ({
       opponentHealth: 100,
       gameStatus: 'ready',
       round: 1,
+      roundLoser: null,
       gauntletOpponents: [],
       gauntletStage: 0,
       countdown: 3,
