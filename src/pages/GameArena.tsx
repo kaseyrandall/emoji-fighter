@@ -100,6 +100,7 @@ export default function GameArena() {
   const [specialBurst, setSpecialBurst] = useState<{ id: number; x: number; y: number } | null>(null);
   const [castFlash, setCastFlash] = useState(false);
   const lastHitSeq = useRef<number>(0);
+  const hitTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const arenaRef = useRef<HTMLDivElement>(null);
   const fighterRef = useRef<HTMLDivElement>(null);
   const [jumpScale, setJumpScale] = useState(1);
@@ -161,25 +162,36 @@ export default function GameArena() {
       transition: { duration: special ? 0.4 : 0.25 }
     });
 
-    // Red flash on the struck fighter
-    setFlash(hitEvent.target);
-    const flashTimer = setTimeout(() => setFlash(null), 150);
+    // Red flash on the struck fighter. Clear only if this same flash is still
+    // showing, so a newer hit on the other fighter isn't wiped early.
+    const target = hitEvent.target;
+    setFlash(target);
+    const flashTimer = setTimeout(() => setFlash(f => (f === target ? null : f)), 150);
 
     // Floating damage number on the struck fighter — keep only the latest per
     // fighter so rapid hits replace rather than pile up into an unreadable smear.
-    const x = hitEvent.target === 'player' ? playerPosition : opponentPosition;
-    const fh: FloatingHit = { id: hitEvent.seq, amount: hitEvent.amount, target: hitEvent.target, x, special };
+    const x = target === 'player' ? playerPosition : opponentPosition;
+    const fh: FloatingHit = { id: hitEvent.seq, amount: hitEvent.amount, target, x, special };
     setFloatingHits(prev => [...prev.filter(h => h.target !== fh.target), fh]);
+    // Each number removes itself by id. Crucially this timer is NOT cleared when
+    // the next hit lands: a following hit on the OTHER fighter would otherwise
+    // cancel this removal and leave the number stuck on screen across rounds.
     const numTimer = setTimeout(() => {
       setFloatingHits(prev => prev.filter(h => h.id !== fh.id));
     }, 550);
-
-    return () => {
-      clearTimeout(flashTimer);
-      clearTimeout(numTimer);
-    };
+    hitTimers.current.push(flashTimer, numTimer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hitEvent?.seq]);
+
+  // Clear any pending hit timers on unmount, and wipe leftover VFX whenever a
+  // fresh round or match begins so nothing carries over.
+  useEffect(() => () => { hitTimers.current.forEach(clearTimeout); hitTimers.current = []; }, []);
+  useEffect(() => {
+    if (gameStatus === 'intro' || gameStatus === 'ready') {
+      setFloatingHits([]);
+      setFlash(null);
+    }
+  }, [gameStatus]);
 
   // Fire the special-cast burst when the player launches a special.
   useEffect(() => {
