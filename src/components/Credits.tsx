@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { X, Mail, Gamepad2 } from 'lucide-react';
+import { X, Mail, Gamepad2, Globe } from 'lucide-react';
 
 interface CreditsProps {
   onClose: () => void;
@@ -58,7 +58,20 @@ export default function Credits({ onClose }: CreditsProps) {
                         landscape:border-l landscape:border-white/10 landscape:pl-5">
             <div>
               <div className="text-[10px] uppercase tracking-[0.18em] text-gray-500">Created by</div>
-              <div className="text-base font-bold text-white leading-tight">Kasey Randall</div>
+              <div className="flex items-center justify-center landscape:justify-start gap-2">
+                <span className="text-base font-bold text-white leading-tight">Kasey Randall</span>
+                <a
+                  href="https://kaseyrandall.design"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Kasey Randall — website"
+                  title="kaseyrandall.design"
+                  className="shrink-0 w-6 h-6 rounded-md bg-white/10 hover:bg-white/20 text-indigo-300 hover:text-indigo-200
+                           flex items-center justify-center transition-colors"
+                >
+                  <Globe size={14} />
+                </a>
+              </div>
               <div className="text-xs text-yellow-400">Design · Development · Art Direction</div>
             </div>
             <div>
