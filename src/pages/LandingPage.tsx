@@ -1,8 +1,9 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import ReactGA from 'react-ga4';
-import { motion } from 'framer-motion';
-import { Swords, ArrowLeft } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Swords, Info } from 'lucide-react';
+import Credits from '../components/Credits';
 
 const EmojiRain = () => {
   const emojis = ['🥷', '🤖', '👽', '🐲', '💩', '👊', '🦾', '💥', '⚡️', '🔥'];
@@ -58,6 +59,7 @@ const EmojiRain = () => {
 
 export default function LandingPage() {
   const navigate = useNavigate();
+  const [showCredits, setShowCredits] = React.useState(false);
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4">
@@ -68,25 +70,39 @@ export default function LandingPage() {
         </div>
         <h1 className="text-5xl lg:text-6xl font-bold mb-4">Emoji Fighter</h1>
         <p className="text-xl mb-8 text-gray-300">Battle with emoji warriors!</p>
-        <button
-          onClick={() => {
-            ReactGA.event({
-              category: 'Game',
-              action: 'Start Game',
-              label: 'Landing Page'
-            });
-            navigate('/select');
-          }}
-          className="px-8 py-4 bg-yellow-500 text-black rounded-lg text-xl font-bold 
-                   hover:bg-yellow-400 transition-colors shadow-lg
-                   active:transform active:scale-95"
-        >
-          Play Now
-        </button>
+        <div className="flex flex-col items-center gap-3">
+          <button
+            onClick={() => {
+              ReactGA.event({
+                category: 'Game',
+                action: 'Start Game',
+                label: 'Landing Page'
+              });
+              navigate('/select');
+            }}
+            className="px-8 py-4 bg-yellow-500 text-black rounded-lg text-xl font-bold
+                     hover:bg-yellow-400 transition-colors shadow-lg
+                     active:transform active:scale-95"
+          >
+            Play Now
+          </button>
+          <button
+            onClick={() => setShowCredits(true)}
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-gray-300 hover:text-white
+                     transition-colors text-sm font-semibold"
+          >
+            <Info size={16} />
+            Credits
+          </button>
+        </div>
       </div>
       <footer className="footer">
-        Copyright Edge Kase Inc 2025. All Rights Reserved.
+        © 2026 Edge Kase Interactive. All Rights Reserved.
       </footer>
+
+      <AnimatePresence>
+        {showCredits && <Credits onClose={() => setShowCredits(false)} />}
+      </AnimatePresence>
     </div>
   );
 }
