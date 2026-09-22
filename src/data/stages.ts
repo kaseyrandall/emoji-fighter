@@ -1,60 +1,53 @@
 // Stage backgrounds live in the public/ folder and are referenced by URL.
-const nightMarket = '/assets/night-market.png';
-const retroArcade = '/assets/retro-arcade.png';
-const rooftopParty = '/assets/rooftop-party.png';
-const seafoodPier = '/assets/seafood-pier.png';
-const spaceStation = '/assets/space-station.png';
-const westernTown = '/assets/western-town.png';
+// Masters are kept as PNG in "_assets/Background Art/"; these are WebP
+// re-encodes of them, which keeps the arena light enough to load on mobile.
+const canopyArena = '/assets/canopy-arena.webp';
+const pirateCove = '/assets/pirate-cove.webp';
+const jungleTemple = '/assets/jungle-temple.webp';
+const emojiFactory = '/assets/emoji-factory.webp';
+const neonSubway = '/assets/neon-subway.webp';
 
 import { Stage } from '../types/game';
 
 export const stages: Stage[] = [
   {
-    id: 'night-market',
-    name: 'Night Market',
-    background: nightMarket,
-    description: 'A bustling street market illuminated by neon lights',
-    floorColor: '',
-    ambientLight: 'bg-purple-500/20'
-  },
-  {
-    id: 'retro-arcade',
-    name: 'Retro Arcade',
-    background: retroArcade,
-    description: 'A nostalgic arcade filled with classic games',
-    floorColor: '',
-    ambientLight: 'bg-blue-500/20'
-  },
-  {
-    id: 'rooftop-party',
-    name: 'Rooftop Party',
-    background: rooftopParty,
-    description: 'A vibrant rooftop with city lights',
-    floorColor: '',
-    ambientLight: 'bg-red-500/20'
-  },
-  {
-    id: 'seafood-pier',
-    name: 'Seafood Pier',
-    background: seafoodPier,
-    description: 'A lively pier with fresh seafood stalls',
-    floorColor: '',
-    ambientLight: 'bg-cyan-500/20'
-  },
-  {
-    id: 'space-station',
-    name: 'Space Station',
-    background: spaceStation,
-    description: 'A futuristic space station orbiting Earth',
-    floorColor: '',
-    ambientLight: 'bg-violet-500/20'
-  },
-  {
-    id: 'western-town',
-    name: 'Western Town',
-    background: westernTown,
-    description: 'A dusty town in the Old West',
+    id: 'canopy-arena',
+    name: 'Canopy Arena',
+    background: canopyArena,
+    description: 'A lantern-lit duelling ring high in the treetops',
     floorColor: '',
     ambientLight: 'bg-amber-500/20'
+  },
+  {
+    id: 'pirate-cove',
+    name: 'Pirate Cove',
+    background: pirateCove,
+    description: 'A sunset dock in the shadow of a corsair galleon',
+    floorColor: '',
+    ambientLight: 'bg-orange-500/20'
+  },
+  {
+    id: 'jungle-temple',
+    name: 'Jungle Temple',
+    background: jungleTemple,
+    description: 'Stone guardians watching over an overgrown ruin',
+    floorColor: '',
+    ambientLight: 'bg-emerald-500/20'
+  },
+  {
+    id: 'emoji-factory',
+    name: 'Emoji Factory',
+    background: emojiFactory,
+    description: 'The assembly line where every emoji is forged',
+    floorColor: '',
+    ambientLight: 'bg-yellow-500/20'
+  },
+  {
+    id: 'neon-subway',
+    name: 'Neon Subway',
+    background: neonSubway,
+    description: 'A humming platform under the neon-soaked city',
+    floorColor: '',
+    ambientLight: 'bg-fuchsia-500/20'
   }
 ];
