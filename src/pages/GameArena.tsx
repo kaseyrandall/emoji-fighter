@@ -12,7 +12,11 @@ import Joystick from '../components/Joystick';
 // short landscape phone that arc carries the fighter off the top of the screen,
 // so the arena scales it to the headroom it actually has. playerY is purely
 // presentational — nothing in hit detection reads it — so scaling only changes
-// how high the hop looks, never whether an attack lands.
+// how high the jump looks, never whether an attack lands.
+
+// Breathing room kept between the top of the fighter's head and the top of the
+// screen at the peak of a jump.
+const JUMP_CEILING_GAP = 8;
 
 interface FloatingHit {
   id: number;
@@ -95,10 +99,11 @@ export default function GameArena() {
   const fighterRef = useRef<HTMLDivElement>(null);
   const [jumpScale, setJumpScale] = useState(1);
 
-  // Measure how far the fighter can rise before its head leaves the arena (the
-  // arena's top edge is the underside of the HUD). Both terms are independent
-  // of the fighter's current offset, so a resize or rotation mid-jump still
-  // measures the resting geometry.
+  // Measure how far the fighter can rise before leaving the screen. The ceiling
+  // is the top of the viewport, not the underside of the HUD: at the top of a
+  // big jump the head passes behind the health bars for a moment, which reads
+  // fine and leaves the arc nearly intact. Holding it below the HUD instead
+  // would cap a 375px-tall phone at ~75px, which is a hop, not a jump.
   React.useLayoutEffect(() => {
     const arena = arenaRef.current;
     const fighter = fighterRef.current;
@@ -109,9 +114,14 @@ export default function GameArena() {
       // derived from a zero height and the jump would flatten.
       if (!arena.clientHeight || !fighter.offsetHeight) return;
       const cs = getComputedStyle(arena);
-      const contentHeight =
-        arena.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
-      const headroom = contentHeight - fighter.offsetHeight - 4;
+      // Resting top of the fighter, derived from the arena box and the
+      // fighter's own height — both independent of its current jump offset, so
+      // a resize or rotation mid-jump still measures the resting geometry.
+      const restTop =
+        arena.getBoundingClientRect().bottom -
+        parseFloat(cs.paddingBottom) -
+        fighter.offsetHeight;
+      const headroom = restTop - JUMP_CEILING_GAP;
       setJumpScale(Math.max(0, Math.min(1, headroom / JUMP_PEAK)));
     };
 
