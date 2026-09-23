@@ -85,6 +85,10 @@ export default function GameArena() {
   // The charged aura / glow should only pulse during live play — not linger on
   // the pause, KO or result screens.
   const chargedGlow = specialReady && gameStatus === 'playing';
+  // The loser stays knocked down through the KO beat and, when the match ends,
+  // the result screen too.
+  const koScreen =
+    gameStatus === 'roundEnd' || gameStatus === 'won' || gameStatus === 'lost' || gameStatus === 'champion';
   const useSpecial = () => {
     const s = useGameStore.getState();
     if (s.gameStatus === 'playing' && s.specialMeter >= 100) {
@@ -220,11 +224,12 @@ export default function GameArena() {
     // Face the last-moved direction: default facing "right" is the flipped emoji.
     const facX = playerFacing === 'right' ? -1 : 1;
 
-    // KO beat: the loser topples, the winner does a little victory hop.
+    // The loser stays down through the KO beat and the end-of-match result
+    // screen; the round winner does a quick victory hop during the beat only.
+    if (roundLoser === 'player' && koScreen) {
+      return { scaleX: facX, rotate: -78, y: 28, opacity: 0.7, transition: { duration: 0.5, ease: 'backOut' } };
+    }
     if (gameStatus === 'roundEnd') {
-      if (roundLoser === 'player') {
-        return { scaleX: facX, rotate: -78, y: 28, opacity: 0.7, transition: { duration: 0.5, ease: 'backOut' } };
-      }
       return { scaleX: facX, y: [0, -20, 0], transition: { duration: 0.5, repeat: 2, ease: 'easeOut' } };
     }
 
@@ -266,11 +271,12 @@ export default function GameArena() {
   };
 
   const getOpponentAnimation = () => {
-    // KO beat: the loser topples, the winner does a little victory hop.
+    // The loser stays down through the KO beat and the end-of-match result
+    // screen; the round winner does a quick victory hop during the beat only.
+    if (roundLoser === 'opponent' && koScreen) {
+      return { rotate: 78, y: 28, opacity: 0.7, transition: { duration: 0.5, ease: 'backOut' } };
+    }
     if (gameStatus === 'roundEnd') {
-      if (roundLoser === 'opponent') {
-        return { rotate: 78, y: 28, opacity: 0.7, transition: { duration: 0.5, ease: 'backOut' } };
-      }
       return { y: [0, -20, 0], transition: { duration: 0.5, repeat: 2, ease: 'easeOut' } };
     }
 
@@ -847,7 +853,7 @@ export default function GameArena() {
       {/* Controls — kept mounted across the round countdown too, so a joystick
           held through a KO doesn't lose the still-down finger on the next round. */}
       {(gameStatus === 'ready' || gameStatus === 'playing') && (
-        <div className="game-controls lg:hidden items-end">
+        <div className="game-controls items-end">
           {/* Movement joystick */}
           <Joystick onMoveDir={setMoveDir} onJump={() => performMove('jump')} size={116} />
 
