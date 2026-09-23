@@ -310,6 +310,16 @@ export default function GameArena() {
     };
   }, []);
 
+  // Auto-pause when the tab/app is backgrounded: stops the loops (saving CPU
+  // and battery) and keeps the player from being KO'd while they're away.
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.hidden) useGameStore.getState().pauseGame();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
+
   // Each bout opens on the VS intro screen, then rolls into the countdown.
   useEffect(() => {
     if (gameStatus !== 'intro') return;
@@ -582,7 +592,7 @@ export default function GameArena() {
             style={{
               left: `${opponentPosition}%`,
               bottom: `${opponentY * jumpScale}px`,
-              transition: 'left 0.2s ease-out, bottom 0.08s linear',
+              transition: 'bottom 0.08s linear',
               filter: flash === 'opponent'
                 ? 'brightness(1.9) drop-shadow(0 0 22px rgba(255,40,40,0.95))'
                 : 'drop-shadow(0 0 15px rgba(255,255,255,0.5))'

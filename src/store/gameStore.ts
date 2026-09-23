@@ -423,17 +423,11 @@ export const useGameStore = create<GameStore>((set) => ({
       const jumpChance = Math.min(0.06, 0.015 + stage * 0.006);
       const playerAirborne = state.playerY > JUMP_PEAK * 0.35;
 
-      // Move towards player if too far
+      // Out of range: the horizontal approach is integrated by the 60fps
+      // movement loop (so the opponent glides as smoothly as the player); here
+      // the AI only decides whether to hop in while closing.
       if (distance > HIT_RANGE) {
         aiEnteredRangeAt = 0; // out of range — reset the reaction timer
-        const step = diff.moveSpeed;
-        if (state.playerPosition < state.opponentPosition) {
-          set(s => ({ opponentPosition: Math.max(POS_MIN, s.opponentPosition - step) }));
-        } else {
-          set(s => ({ opponentPosition: Math.min(POS_MAX, s.opponentPosition + step) }));
-        }
-        // Hop forward now and then while closing — reads as an aggressive
-        // approach, and a jump-in can lead straight into an attack on landing.
         if (!airborne && distance < 45 && Math.random() < jumpChance) startOppJump();
         return;
       }
@@ -463,8 +457,10 @@ export const useGameStore = create<GameStore>((set) => ({
     aiLoop = setInterval(runAI, 50);
   },
 
-  // Integrate the player's horizontal velocity each tick: ease toward the input
-  // direction, coast with friction when released, and stop dead at the walls.
+  // Movement loop (60fps): integrates the player's velocity AND glides the
+  // opponent toward the player, so both fighters move at the same smooth rate.
+  // The AI loop only makes decisions (attack / jump); it no longer nudges the
+  // opponent at 20fps, which used to look laggy behind a 0.2s CSS transition.
   playerPhysics: () => {
     // Never run two physics loops at once.
     if (physicsLoop) clearInterval(physicsLoop);
@@ -475,6 +471,7 @@ export const useGameStore = create<GameStore>((set) => ({
         return;
       }
 
+      // Player velocity: ease toward input, coast with friction, stop at walls.
       const target = s.moveDir * PLAYER_MAX_SPEED;
       let vel = s.moveDir !== 0
         ? s.playerVel + (target - s.playerVel) * PLAYER_ACCEL
@@ -485,11 +482,29 @@ export const useGameStore = create<GameStore>((set) => ({
       if (pos <= POS_MIN) { pos = POS_MIN; vel = 0; }
       if (pos >= POS_MAX) { pos = POS_MAX; vel = 0; }
 
-      if (pos === s.playerPosition && vel === 0 && s.playerVel === 0) return;
+      // Opponent approach at the same 60fps cadence (moveSpeed is tuned per
+      // 50ms, so scale it down to this tick).
+      let oppPos = s.opponentPosition;
+      if (Math.abs(pos - oppPos) > HIT_RANGE) {
+        const diff = difficultyForStage(s.gauntletStage + DIFF_OFFSET[s.difficulty]);
+        const oppStep = diff.moveSpeed * (MOVE_TICK_MS / 50);
+        oppPos = pos < oppPos
+          ? Math.max(POS_MIN, oppPos - oppStep)
+          : Math.min(POS_MAX, oppPos + oppStep);
+      }
 
-      const patch: Partial<GameState> & { playerVel: number } = { playerPosition: pos, playerVel: vel };
-      if (s.moveDir < -0.05) patch.playerFacing = 'left';
-      else if (s.moveDir > 0.05) patch.playerFacing = 'right';
+      const playerChanged = pos !== s.playerPosition || vel !== s.playerVel;
+      const oppChanged = oppPos !== s.opponentPosition;
+      if (!playerChanged && !oppChanged) return; // idle — no re-render
+
+      const patch: Partial<GameState> & { playerVel?: number } = {};
+      if (playerChanged) {
+        patch.playerPosition = pos;
+        patch.playerVel = vel;
+        if (s.moveDir < -0.05) patch.playerFacing = 'left';
+        else if (s.moveDir > 0.05) patch.playerFacing = 'right';
+      }
+      if (oppChanged) patch.opponentPosition = oppPos;
       set(patch);
     }, MOVE_TICK_MS);
   },
