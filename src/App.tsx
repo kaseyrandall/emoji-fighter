@@ -5,13 +5,18 @@ import LandingPage from './pages/LandingPage';
 import CharacterSelect from './pages/CharacterSelect';
 import GameArena from './pages/GameArena';
 import { useOrientation } from './hooks/useOrientation';
+import { usePreventZoom } from './hooks/usePreventZoom';
 import OrientationModal from './components/OrientationModal';
 import { AnimatePresence } from 'framer-motion';
 
 function AppContent() {
   const isLandscape = useOrientation();
   const location = useLocation();
-  
+
+  // iOS (Safari & Chrome are both WebKit) ignores user-scalable=no; block the
+  // pinch / double-tap zoom gestures directly instead.
+  usePreventZoom();
+
   React.useEffect(() => {
     ReactGA.send({ hitType: "pageview", page: location.pathname });
   }, [location]);
