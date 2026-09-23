@@ -596,7 +596,20 @@ export const useGameStore = create<GameStore>((set) => ({
         const isFinalStage = state.gauntletStage >= state.gauntletOpponents.length - 1;
         // Player loss ends the run; a win either clears the stage or wins it all.
         const gameStatus = opponentWins >= 2 ? 'lost' : isFinalStage ? 'champion' : 'won';
-        set({ gameStatus, ...common });
+        // The match is over — leave the loser knocked down where they fell
+        // (keep roundLoser + positions), just clear the transient combat state.
+        set({
+          gameStatus,
+          playerY: 0,
+          opponentY: 0,
+          isJumping: false,
+          isAttacking: false,
+          isOpponentAttacking: false,
+          currentMove: null,
+          moveDir: 0,
+          playerVel: 0,
+          specialMeter: 0
+        });
       } else {
         set({
           round: state.round + 1,

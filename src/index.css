@@ -46,6 +46,15 @@
     padding-left: calc(1rem + env(safe-area-inset-left));
     padding-right: calc(1rem + env(safe-area-inset-right));
   }
+  /* Show the touch controls on every touch device (phones AND large iPads),
+     and hide them only on true mouse/desktop pointers, which play by keyboard.
+     The old `lg:hidden` keyed off width, so an iPad Pro in landscape (≥1024px)
+     lost its controls entirely. */
+  @media (hover: hover) and (pointer: fine) {
+    .game-controls {
+      display: none;
+    }
+  }
   .move-button {
     @apply bg-gray-700/50 p-4 rounded-full text-lg font-bold active:bg-gray-600/50 transition-colors;
   }
