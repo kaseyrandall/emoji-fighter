@@ -61,9 +61,13 @@ let playerCooldown = PLAYER_ATTACK_COOLDOWN; // recovery owed by the last attack
 // connect at near-contact; the special reaches a little further. The AI uses
 // HIT_RANGE to decide it's close enough to start throwing attacks.
 const HIT_RANGE = 15;
-// Closest the two fighters' centres can get (bodies are ~12 units wide), so
-// they bump into each other instead of passing through.
+// Closest the two fighters can get on the ground (bodies are ~12 units wide),
+// so they bump into each other instead of walking through. Jumping clears it.
 const MIN_SEPARATION = 11;
+// Knock `victim` away from `attacker` (whichever side they're on now that
+// fighters can cross over), staying inside the arena.
+const knockAway = (victim: number, attacker: number, amount: number) =>
+  Math.max(POS_MIN, Math.min(POS_MAX, victim + (Math.sign(victim - attacker) || 1) * amount));
 const SPECIAL_RANGE = 19;
 
 // Super meter: landing punches charges it; the special can only fire when
@@ -109,6 +113,8 @@ const randomStageId = () => stages[Math.floor(Math.random() * stages.length)].id
 // Peak of the jump arc, in px. The arena scales this down when a short
 // viewport can't fit the whole arc (see jumpScale in GameArena).
 export const JUMP_PEAK = 230;
+// Above this height a fighter is "over" the other one and can pass across.
+const CLEAR_HEIGHT = JUMP_PEAK * 0.2;
 const JUMP_STEP = 16;
 
 // State shared by startGauntlet / advanceGauntlet when a fresh bout begins.
@@ -315,7 +321,7 @@ export const useGameStore = create<GameStore>((set) => ({
     const hitEvent = { target: 'opponent' as const, amount: damage, move, seq: nextHit() };
 
     // Knock the opponent back a touch on hit.
-    const knockedPosition = Math.min(POS_MAX, state.opponentPosition + 4);
+    const knockedPosition = knockAway(state.opponentPosition, state.playerPosition, 4);
     // Landing an attack charges the super meter.
     const specialMeter = Math.min(SPECIAL_METER_MAX, state.specialMeter + SPECIAL_GAIN);
 
@@ -352,7 +358,7 @@ export const useGameStore = create<GameStore>((set) => ({
     const newOpponentHealth = Math.max(0, state.opponentHealth - damage);
     const hitEvent = { target: 'opponent' as const, amount: damage, move: 'special' as const, seq: nextHit() };
 
-    const knockedPosition = Math.min(POS_MAX, state.opponentPosition + 14);
+    const knockedPosition = knockAway(state.opponentPosition, state.playerPosition, 14);
 
     if (newOpponentHealth <= 0) {
       set({ opponentHealth: 0, opponentPosition: knockedPosition, hitEvent });
@@ -384,7 +390,7 @@ export const useGameStore = create<GameStore>((set) => ({
 
     // Knock the player back a touch on hit.
     const knockback = randomMove === 'special' ? 8 : 4;
-    const knockedPosition = Math.max(POS_MIN, state.playerPosition - knockback);
+    const knockedPosition = knockAway(state.playerPosition, state.opponentPosition, knockback);
 
     if (newPlayerHealth <= 0) {
       set({ playerHealth: 0, playerPosition: knockedPosition, hitEvent });
@@ -500,20 +506,25 @@ export const useGameStore = create<GameStore>((set) => ({
       if (pos <= POS_MIN) { pos = POS_MIN; vel = 0; }
       if (pos >= POS_MAX) { pos = POS_MAX; vel = 0; }
 
-      // Fighters are solid: the player can't walk (or jump) through the
-      // opponent, only up against them. Keep whichever side they're on now.
-      const side = s.playerPosition <= s.opponentPosition ? -1 : 1;
-      if (side < 0 && pos > s.opponentPosition - MIN_SEPARATION) {
-        pos = Math.max(s.playerPosition, s.opponentPosition - MIN_SEPARATION);
-        vel = 0;
-      } else if (side > 0 && pos < s.opponentPosition + MIN_SEPARATION) {
-        pos = Math.min(s.playerPosition, s.opponentPosition + MIN_SEPARATION);
-        vel = 0;
+      // Fighters are solid on the ground: walking into the opponent pushes
+      // up against them. While either one is in the air they can pass, so a
+      // jump carries the player over to the other side. Any overlap left on
+      // landing is pushed apart on whichever side of the opponent's centre
+      // the player came down on — short of the centre, you didn't make it.
+      let oppPos = s.opponentPosition;
+      const airborne = s.playerY > CLEAR_HEIGHT || s.opponentY > CLEAR_HEIGHT;
+      if (!airborne && Math.abs(pos - oppPos) < MIN_SEPARATION) {
+        const side = Math.sign(pos - oppPos) || (s.playerPosition <= oppPos ? -1 : 1);
+        pos = oppPos + side * MIN_SEPARATION;
+        // Pinned against a wall: shove the opponent out instead.
+        if (pos < POS_MIN || pos > POS_MAX) {
+          pos = Math.max(POS_MIN, Math.min(POS_MAX, pos));
+          oppPos = pos - side * MIN_SEPARATION;
+        }
       }
 
       // Opponent approach at the same 60fps cadence (moveSpeed is tuned per
       // 50ms, so scale it down to this tick).
-      let oppPos = s.opponentPosition;
       if (Math.abs(pos - oppPos) > HIT_RANGE) {
         const diff = difficultyForStage(s.gauntletStage + DIFF_OFFSET[s.difficulty]);
         const oppStep = diff.moveSpeed * (MOVE_TICK_MS / 50);

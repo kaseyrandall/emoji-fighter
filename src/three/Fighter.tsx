@@ -110,7 +110,7 @@ export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 
     a.x = damp(a.x, inp.x, 22, rawDt);
     a.y = damp(a.y, inp.y, 30, rawDt);
     const targetYaw = inp.facing === 1 ? Math.PI + 0.3 : -0.3;
-    a.yaw = damp(a.yaw, targetYaw, 14, dt);
+    a.yaw = damp(a.yaw, targetYaw, 20, dt);
     a.ko = damp(a.ko, inp.pose === 'ko' ? 1 : 0, inp.pose === 'ko' ? 7 : 10, dt);
     a.win = damp(a.win, inp.pose === 'win' ? 1 : 0, 8, dt);
     a.charge = damp(a.charge, inp.charged ? 1 : 0, 6, dt);
