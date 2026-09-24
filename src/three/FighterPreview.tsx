@@ -9,7 +9,7 @@ import { glowTexture } from './textures';
 import { Vfx, VfxApi } from './Vfx';
 import { specialStyleOf } from './specialStyles';
 
-const DEMO: AttackMove[] = ['punch', 'kick', 'punch', 'special'];
+const DEMO: AttackMove[] = ['punch', 'heavy', 'punch', 'special'];
 
 // The selected fighter on a slowly turning pedestal, lit in its signature
 // colour, running through its moves. Switching fighters pops the new one in.

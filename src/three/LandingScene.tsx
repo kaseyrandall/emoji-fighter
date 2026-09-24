@@ -72,7 +72,7 @@ function Showboater({ id, x, facing, delay }: { id: string; x: number; facing: 1
   const input = React.useRef(defaultFighterInput(x, facing));
   const t = React.useRef(-delay);
   const next = React.useRef(0.6);
-  const moves: AttackMove[] = ['punch', 'punch', 'kick', 'punch', 'kick', 'special'];
+  const moves: AttackMove[] = ['punch', 'punch', 'heavy', 'punch', 'heavy', 'special'];
   const step = React.useRef(0);
   useFrame((_, dt) => {
     t.current += Math.min(dt, 1 / 20);

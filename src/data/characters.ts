@@ -14,7 +14,7 @@ export const characters: Character[] = [
     },
     moves: {
       punch: 6,
-      kick: 9,
+      heavy: 9,
       special: 18
     },
     specialName: 'Shadow Strike'
@@ -32,7 +32,7 @@ export const characters: Character[] = [
     },
     moves: {
       punch: 7,
-      kick: 8,
+      heavy: 8,
       special: 16
     },
     specialName: 'System Overload'
@@ -50,7 +50,7 @@ export const characters: Character[] = [
     },
     moves: {
       punch: 8,
-      kick: 10,
+      heavy: 10,
       special: 20
     },
     specialName: 'Cosmic Blast'
@@ -68,7 +68,7 @@ export const characters: Character[] = [
     },
     moves: {
       punch: 7,
-      kick: 8,
+      heavy: 8,
       special: 17
     },
     specialName: 'Dragon Breath'
@@ -86,7 +86,7 @@ export const characters: Character[] = [
     },
     moves: {
       punch: 9,
-      kick: 7,
+      heavy: 7,
       special: 15
     },
     specialName: 'Toxic Gas'
@@ -104,7 +104,7 @@ export const characters: Character[] = [
     },
     moves: {
       punch: 6,
-      kick: 8,
+      heavy: 8,
       special: 19
     },
     specialName: 'Spectral Scream'
@@ -122,7 +122,7 @@ export const characters: Character[] = [
     },
     moves: {
       punch: 10,
-      kick: 6,
+      heavy: 6,
       special: 16
     },
     specialName: 'Brain Buffet'
@@ -140,7 +140,7 @@ export const characters: Character[] = [
     },
     moves: {
       punch: 5,
-      kick: 9,
+      heavy: 9,
       special: 22
     },
     specialName: 'Jurassic Chomp'
@@ -158,7 +158,7 @@ export const characters: Character[] = [
     },
     moves: {
       punch: 8,
-      kick: 8,
+      heavy: 8,
       special: 17
     },
     specialName: 'Ink Bomb'
@@ -176,7 +176,7 @@ export const characters: Character[] = [
     },
     moves: {
       punch: 11,
-      kick: 7,
+      heavy: 7,
       special: 18
     },
     specialName: 'Chest Thunder'
@@ -194,7 +194,7 @@ export const characters: Character[] = [
     },
     moves: {
       punch: 8,
-      kick: 9,
+      heavy: 9,
       special: 20
     },
     specialName: 'Hellfire'
@@ -212,7 +212,7 @@ export const characters: Character[] = [
     },
     moves: {
       punch: 7,
-      kick: 8,
+      heavy: 8,
       special: 19
     },
     specialName: 'Absolute Zero'
@@ -230,7 +230,7 @@ export const characters: Character[] = [
     },
     moves: {
       punch: 9,
-      kick: 11,
+      heavy: 11,
       special: 16
     },
     specialName: 'Roundhouse Peck'
@@ -248,7 +248,7 @@ export const characters: Character[] = [
     },
     moves: {
       punch: 8,
-      kick: 8,
+      heavy: 8,
       special: 21
     },
     specialName: 'Rainbow Ram'
@@ -266,7 +266,7 @@ export const characters: Character[] = [
     },
     moves: {
       punch: 8,
-      kick: 8,
+      heavy: 8,
       special: 18
     },
     specialName: 'Balloon Bomb'

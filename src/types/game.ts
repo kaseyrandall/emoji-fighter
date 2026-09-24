@@ -11,7 +11,7 @@ export interface Character {
   };
   moves: {
     punch: number;
-    kick: number;
+    heavy: number; // uppercut: slower recovery, more damage
     special: number;
   };
   specialName: string;
@@ -53,7 +53,7 @@ export interface HitEvent {
   seq: number;
 }
 
-export type AttackMove = 'punch' | 'kick' | 'special';
+export type AttackMove = 'punch' | 'heavy' | 'special';
 export type Move = AttackMove | 'left' | 'right' | 'jump';
 
 export interface Stage {

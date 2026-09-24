@@ -16,7 +16,7 @@ interface FighterProps {
 }
 
 const BODY = 1.8; // glyph size in world units
-const ATTACK_DUR: Record<AttackMove, number> = { punch: 0.3, kick: 0.42, special: 0.65 };
+const ATTACK_DUR: Record<AttackMove, number> = { punch: 0.3, heavy: 0.42, special: 0.65 };
 
 const circle = new THREE.PlaneGeometry(1, 1);
 
@@ -33,21 +33,17 @@ const strike = (p: number, peak: number) =>
 // glyphs naturally face; the rig turns 180° to face right).
 const LEAD_GLOVE = new THREE.Vector3(-0.95, 0.95, 0.45);
 const REAR_GLOVE = new THREE.Vector3(-0.55, 1.2, -0.4);
-const LEAD_BOOT = new THREE.Vector3(-0.35, 0.24, 0.25);
-const REAR_BOOT = new THREE.Vector3(0.4, 0.24, -0.2);
 const tmp = new THREE.Vector3();
 const pulseOf = (t: number) => Math.sin(t * 6);
 
-// Limbs are small emoji cutouts too. The 🥊 glyph punches toward screen-right,
+// Gloves are small emoji cutouts too. The 🥊 glyph punches toward screen-right,
 // so it's mirrored to point along the rig's forward (-X) axis.
 const GLOVE = '🥊';
-const BOOT = '👟';
 const GLOVE_SIZE = 0.62;
-const BOOT_SIZE = 0.55;
 
 // A Rayman-style emoji brawler: a thick stamped emoji body with floating
-// gloves and boots. Handles idle bounce, running lean, turning, jumping,
-// punch / kick / special swings, hit recoil + flash, the charged aura, and the
+// gloves. Handles idle bounce, running lean, turning, jumping, jab /
+// uppercut / special swings, hit recoil + flash, the charged aura, and the
 // KO topple / victory hop — all procedurally, every frame.
 export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 1 }: FighterProps) {
   const root = React.useRef<THREE.Group>(null);
@@ -57,8 +53,6 @@ export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 
   const spin = React.useRef<THREE.Group>(null);
   const leadGlove = React.useRef<THREE.Group>(null);
   const rearGlove = React.useRef<THREE.Group>(null);
-  const leadBoot = React.useRef<THREE.Group>(null);
-  const rearBoot = React.useRef<THREE.Group>(null);
   const gloveMats = React.useRef<EmojiMaterials[]>([]);
   const shadow = React.useRef<THREE.Mesh>(null);
   const aura = React.useRef<THREE.Sprite>(null);
@@ -88,7 +82,7 @@ export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 
     lastAttackSeq: read().attackSeq,
     lastHitSeq: read().hitSeq,
     attack: null as null | { move: AttackMove; t: number },
-    hit: null as null | { t: number; heavy: boolean },
+    hit: null as null | { t: number; force: number },
     ko: 0, // 0..1 topple progress
     win: 0,
     charge: 0,
@@ -108,7 +102,7 @@ export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 
     }
     if (inp.hitSeq !== a.lastHitSeq) {
       a.lastHitSeq = inp.hitSeq;
-      a.hit = { t: 0, heavy: inp.hitMove === 'special' };
+      a.hit = { t: 0, force: inp.hitMove === 'special' ? 1.6 : inp.hitMove === 'heavy' ? 1.3 : 1 };
     }
 
     // Follow the simulation smoothly (it ticks at a fixed rate; we render at
@@ -137,23 +131,19 @@ export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 
     lg.y += Math.sin(a.t * 7 + 1) * 0.06;
     const rg = REAR_GLOVE.clone();
     rg.y += Math.sin(a.t * 7 + 2.2) * 0.06;
-    const lb = LEAD_BOOT.clone();
-    const rb = REAR_BOOT.clone();
     let gloveScale = 1;
+    let rearScale = 1;
 
-    // Running: little alternating steps.
+    // Running: a bouncy hop in step with the stride.
     if (!airborne && Math.abs(inp.vel) > 0.4 && inp.pose === 'fight') {
       const stride = a.t * 16;
-      lb.y += Math.max(0, Math.sin(stride)) * 0.18;
-      rb.y += Math.max(0, -Math.sin(stride)) * 0.18;
-      lb.x += Math.sin(stride) * 0.12;
-      rb.x -= Math.sin(stride) * 0.12;
+      bodyY += Math.abs(Math.sin(stride)) * 0.06;
+      lg.x += Math.sin(stride) * 0.08;
+      rg.x -= Math.sin(stride) * 0.08;
     }
 
-    // Airborne: tuck the feet and raise the guard.
+    // Airborne: raise the guard.
     if (airborne) {
-      lb.y += 0.3; rb.y += 0.35;
-      lb.x += 0.15; rb.x -= 0.1;
       lg.y += 0.2; rg.y += 0.25;
       bodyScaleY *= 1.04;
     }
@@ -169,14 +159,18 @@ export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 
         bodyRotZ += 0.2 * e;
         bodyX -= 0.22 * e;
         gloveScale = 1 + 0.25 * e;
-      } else if (a.attack.move === 'kick') {
-        const e = strike(p, 0.35);
-        lb.lerp(new THREE.Vector3(-1.85, 0.8, 0.2), e);
-        bodyRotZ -= 0.32 * e;
-        bodyX += 0.1 * e;
-        bodyY += 0.12 * e;
-        lg.y += 0.25 * e;
-        rg.y += 0.2 * e;
+      } else if (a.attack.move === 'heavy') {
+        // Uppercut with the rear glove: dip and draw back, then swing it up
+        // and through in front of the body.
+        const windup = Math.sin(clamp01(p / 0.3) * Math.PI * 0.5) * (1 - clamp01((p - 0.3) / 0.15));
+        const e = strike(clamp01((p - 0.25) / 0.75), 0.3);
+        rg.lerp(new THREE.Vector3(0.1, 0.45, 0.2), windup);
+        rg.lerp(new THREE.Vector3(-1.7, 1.85, 0.45), e);
+        lg.lerp(new THREE.Vector3(-0.7, 1.35, 0.5), Math.max(windup, e));
+        bodyY += -0.1 * windup + 0.16 * e;
+        bodyRotZ += -0.12 * windup + 0.28 * e;
+        bodyX -= 0.25 * e;
+        rearScale = 1 + 0.45 * e;
       } else {
         // Special: wind up, spin, then both gloves thrust out.
         const windup = clamp01(p / 0.25);
@@ -195,9 +189,9 @@ export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 
     let flash = 0;
     if (a.hit) {
       a.hit.t += dt;
-      const dur = a.hit.heavy ? 0.45 : 0.28;
+      const dur = 0.2 + 0.16 * a.hit.force;
       const p = clamp01(a.hit.t / dur);
-      const k = Math.sin(p * Math.PI) * (a.hit.heavy ? 1.6 : 1);
+      const k = Math.sin(p * Math.PI) * a.hit.force;
       bodyRotZ -= 0.3 * k;
       bodyX += 0.28 * k;
       bodyScaleY *= 1 - 0.08 * k;
@@ -232,11 +226,7 @@ export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 
     leadGlove.current!.position.copy(lg);
     rearGlove.current!.position.copy(rg);
     leadGlove.current!.scale.setScalar(gloveScale);
-    rearGlove.current!.scale.setScalar(0.9 * gloveScale);
-    leadBoot.current!.position.copy(lb);
-    rearBoot.current!.position.copy(rb);
-    const bootsDown = 1 - a.ko;
-    leadBoot.current!.visible = rearBoot.current!.visible = bootsDown > 0.3;
+    rearGlove.current!.scale.setScalar(0.9 * gloveScale * rearScale);
 
     // Contact shadow shrinks and fades as the fighter rises.
     const h = a.y;
@@ -282,7 +272,7 @@ export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 
               <EmojiBody emoji={emoji} size={BODY} depth={0.34} layers={10} onMaterials={(m) => (mats.current = m)} />
             </group>
           </group>
-          {/* Rear limbs sit behind the body, lead limbs in front of it. */}
+          {/* The rear glove sits behind the body, the lead glove in front. */}
           <group ref={rearGlove}>
             <group scale={[-1, 1, 1]}>
               <EmojiBody emoji={GLOVE} size={GLOVE_SIZE} depth={0.16} layers={4} onMaterials={(m) => (gloveMats.current[1] = m)} />
@@ -292,12 +282,6 @@ export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 
             <group scale={[-1, 1, 1]}>
               <EmojiBody emoji={GLOVE} size={GLOVE_SIZE} depth={0.16} layers={4} onMaterials={(m) => (gloveMats.current[0] = m)} />
             </group>
-          </group>
-          <group ref={leadBoot}>
-            <EmojiBody emoji={BOOT} size={BOOT_SIZE} depth={0.14} layers={4} />
-          </group>
-          <group ref={rearBoot}>
-            <EmojiBody emoji={BOOT} size={BOOT_SIZE} depth={0.14} layers={4} />
           </group>
         </group>
       </group>

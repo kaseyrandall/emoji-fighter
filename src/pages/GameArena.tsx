@@ -15,7 +15,7 @@ import { specialStyleOf } from '../three/specialStyles';
 export default function GameArena() {
   const navigate = useNavigate();
   const punchSound = useRef<UIFx>();
-  const kickSound = useRef<UIFx>();
+  const heavySound = useRef<UIFx>();
   const specialSound = useRef<UIFx>();
   const winSound = useRef<UIFx>();
   const loseSound = useRef<UIFx>();
@@ -23,7 +23,7 @@ export default function GameArena() {
   useEffect(() => {
     // Initialize sounds after component mounts
     punchSound.current = new UIFx('./assets/punch.wav', { volume: 0.5 });
-    kickSound.current = new UIFx('./assets/kick.wav', { volume: 0.5 });
+    heavySound.current = new UIFx('./assets/kick.wav', { volume: 0.5 });
     specialSound.current = new UIFx('./assets/special.wav', { volume: 0.6 });
     winSound.current = new UIFx('./assets/victory.wav', { volume: 0.7 });
     loseSound.current = new UIFx('./assets/defeat.wav', { volume: 0.7 });
@@ -71,7 +71,7 @@ export default function GameArena() {
   const { performMove, resetGame, togglePause, pauseGame, resumeGame, startCountdown, advanceGauntlet, setMoveDir, performSpecial } =
     useGameStore.getState();
 
-  // Super meter: charged by landing punches/kicks; the special fires only when full.
+  // Super meter: charged by landing punches; the special fires only when full.
   const specialReady = specialMeter >= 100;
   const fireSpecial = () => {
     const s = useGameStore.getState();
@@ -158,8 +158,8 @@ export default function GameArena() {
           playMoveSound('punch');
           break;
         case 'k':
-          performMove('kick');
-          playMoveSound('kick');
+          performMove('heavy');
+          playMoveSound('heavy');
           break;
         case 'l':
           fireSpecial();
@@ -202,13 +202,13 @@ export default function GameArena() {
         });
         punchSound.current?.play();
         break;
-      case 'kick':
+      case 'heavy':
         ReactGA.event({
           category: 'Game',
           action: 'Move Used',
-          label: 'Kick'
+          label: 'Heavy Punch'
         });
-        kickSound.current?.play();
+        heavySound.current?.play();
         break;
       case 'special':
         ReactGA.event({
@@ -455,7 +455,7 @@ export default function GameArena() {
           <Joystick onMoveDir={setMoveDir} onJump={() => performMove('jump')} size={116} />
 
           {/* Attack cluster — special as a clearly-visible apex above the
-              punch/kick primary pair (a triangle, no button hidden behind
+              punch / heavy-punch primary pair (a triangle, no button hidden behind
               another). */}
           <div className="relative w-[10rem] h-[8.5rem] shrink-0 select-none">
             {/* Special apex — always visible; the ring fills as the super meter
@@ -487,12 +487,12 @@ export default function GameArena() {
               className="game-button absolute bottom-0 left-0.5 w-[4.5rem] h-[4.5rem] rounded-full flex items-center justify-center text-3xl bg-red-500/55 border-2 border-red-300/70 focus:outline-none active:bg-red-600/70"
               aria-label="Punch"
             >👊</button>
-            {/* Kick (primary) */}
+            {/* Heavy punch (primary) */}
             <button
-              onClick={() => { performMove('kick'); playMoveSound('kick'); }}
+              onClick={() => { performMove('heavy'); playMoveSound('heavy'); }}
               className="game-button absolute bottom-0 right-0.5 w-[4.5rem] h-[4.5rem] rounded-full flex items-center justify-center text-3xl bg-blue-500/55 border-2 border-blue-300/70 focus:outline-none active:bg-blue-600/70"
-              aria-label="Kick"
-            >🦶</button>
+              aria-label="Heavy punch"
+            >💥</button>
           </div>
         </div>
       )}

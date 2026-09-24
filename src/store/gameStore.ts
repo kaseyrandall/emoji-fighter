@@ -52,9 +52,12 @@ const clearRoundLoops = () => {
 // Recovery between the player's own attacks, so mashing can't stack hits and
 // combat has a rhythm instead of a one-sided slam.
 const PLAYER_ATTACK_COOLDOWN = 340;
+// The heavy punch hits harder but leaves you open for longer.
+const HEAVY_ATTACK_COOLDOWN = 520;
 let playerLastAttackAt = 0;
+let playerCooldown = PLAYER_ATTACK_COOLDOWN; // recovery owed by the last attack
 
-// Reach, in position units (fighters are ~12 units wide). Punches/kicks only
+// Reach, in position units (fighters are ~12 units wide). Punches only
 // connect at near-contact; the special reaches a little further. The AI uses
 // HIT_RANGE to decide it's close enough to start throwing attacks.
 const HIT_RANGE = 15;
@@ -63,10 +66,10 @@ const HIT_RANGE = 15;
 const MIN_SEPARATION = 11;
 const SPECIAL_RANGE = 19;
 
-// Super meter: landing punches/kicks charges it; the special can only fire when
+// Super meter: landing punches charges it; the special can only fire when
 // it's full, then it's spent. A full-meter special hits harder than a raw one.
 const SPECIAL_METER_MAX = 100;
-const SPECIAL_GAIN = 20; // meter gained per landed punch/kick
+const SPECIAL_GAIN = 20; // meter gained per landed punch / heavy punch
 const SPECIAL_SUPER_MULT = 1.4;
 
 // Difficulty ramps with the gauntlet stage: early fights are slow and gentle,
@@ -293,10 +296,11 @@ export const useGameStore = create<GameStore>((set) => ({
       return;
     }
 
-    // Attacks (punch / kick / special) — enforce a recovery window.
+    // Attacks (punch / heavy / special) — enforce a recovery window.
     const nowAttack = Date.now();
-    if (nowAttack - playerLastAttackAt < PLAYER_ATTACK_COOLDOWN) return;
+    if (nowAttack - playerLastAttackAt < playerCooldown) return;
     playerLastAttackAt = nowAttack;
+    playerCooldown = move === 'heavy' ? HEAVY_ATTACK_COOLDOWN : PLAYER_ATTACK_COOLDOWN;
 
     set({ isAttacking: true, currentMove: move, playerAttackSeq: state.playerAttackSeq + 1 });
     setTimeout(() => set({ isAttacking: false, currentMove: null }), 600);
@@ -332,8 +336,9 @@ export const useGameStore = create<GameStore>((set) => ({
     if (state.specialMeter < SPECIAL_METER_MAX) return; // not charged yet
 
     const now = Date.now();
-    if (now - playerLastAttackAt < PLAYER_ATTACK_COOLDOWN) return;
+    if (now - playerLastAttackAt < playerCooldown) return;
     playerLastAttackAt = now;
+    playerCooldown = PLAYER_ATTACK_COOLDOWN;
 
     // Spend the meter on activation.
     set({ isAttacking: true, currentMove: 'special', specialMeter: 0, playerAttackSeq: state.playerAttackSeq + 1 });
@@ -361,7 +366,7 @@ export const useGameStore = create<GameStore>((set) => ({
     const state = useGameStore.getState();
     if (state.gameStatus !== 'playing') return;
 
-    const moves: AttackMove[] = ['punch', 'kick', 'special'];
+    const moves: AttackMove[] = ['punch', 'heavy', 'special'];
     const randomMove = moves[Math.floor(Math.random() * moves.length)];
 
     set({ isOpponentAttacking: true, opponentMove: randomMove, opponentAttackSeq: state.opponentAttackSeq + 1 });

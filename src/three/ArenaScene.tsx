@@ -21,7 +21,7 @@ const toWorldY = (y: number) => (y / JUMP_PEAK) * JUMP_HEIGHT;
 // Store positions move ~60 steps a second; velocity in world units / second.
 const VEL_SCALE = WORLD_PER_POS * 60;
 
-const HIT_COLORS = { punch: '#ffd84d', kick: '#5fd0ff' } as const;
+const HIT_COLORS = { punch: '#ffd84d', heavy: '#ff8a3d' } as const;
 
 // Shared, frame-loop-only effect clocks (never trigger React renders).
 interface FxState {
@@ -43,10 +43,10 @@ function readPlayer(out: FighterInput): FighterInput {
   out.facing = toWorldX(s.opponentPosition) >= out.x ? 1 : -1;
   out.vel = s.playerVel * VEL_SCALE;
   out.attackSeq = s.playerAttackSeq;
-  out.attackMove = s.currentMove === 'punch' || s.currentMove === 'kick' || s.currentMove === 'special' ? s.currentMove : out.attackMove;
+  out.attackMove = s.currentMove === 'punch' || s.currentMove === 'heavy' || s.currentMove === 'special' ? s.currentMove : out.attackMove;
   if (s.hitEvent?.target === 'player') {
     out.hitSeq = s.hitEvent.seq;
-    out.hitMove = s.hitEvent.move === 'punch' || s.hitEvent.move === 'kick' || s.hitEvent.move === 'special' ? s.hitEvent.move : null;
+    out.hitMove = s.hitEvent.move === 'punch' || s.hitEvent.move === 'heavy' || s.hitEvent.move === 'special' ? s.hitEvent.move : null;
   }
   out.pose = s.roundLoser === 'player' && koScreen(s.gameStatus)
     ? 'ko'
@@ -71,7 +71,7 @@ function readOpponent(out: FighterInput, lastX: { v: number }): FighterInput {
   out.attackMove = s.opponentMove;
   if (s.hitEvent?.target === 'opponent') {
     out.hitSeq = s.hitEvent.seq;
-    out.hitMove = s.hitEvent.move === 'punch' || s.hitEvent.move === 'kick' || s.hitEvent.move === 'special' ? s.hitEvent.move : null;
+    out.hitMove = s.hitEvent.move === 'punch' || s.hitEvent.move === 'heavy' || s.hitEvent.move === 'special' ? s.hitEvent.move : null;
   }
   out.pose = s.roundLoser === 'opponent' && koScreen(s.gameStatus)
     ? 'ko'
@@ -219,7 +219,7 @@ function EventFx({ fx, vfx }: { fx: React.MutableRefObject<FxState>; vfx: React.
       const attackerX = h.target === 'player' ? toWorldX(s.opponentPosition) : toWorldX(s.playerPosition);
       // Sparks fly from the side the blow came from.
       const side = Math.sign(attackerX - target.x) || 1;
-      v.set(target.x + side * 0.55, target.y + (h.move === 'kick' ? 0.8 : 1.15), 0.4);
+      v.set(target.x + side * 0.55, target.y + (h.move === 'heavy' ? 1.45 : 1.15), 0.4);
       // A special's impact sparks take the attacker's special colour.
       const attacker = h.target === 'player' ? s.opponent : s.selectedCharacter;
       const color = special
@@ -227,7 +227,7 @@ function EventFx({ fx, vfx }: { fx: React.MutableRefObject<FxState>; vfx: React.
         : HIT_COLORS[(h.move as keyof typeof HIT_COLORS) ?? 'punch'] ?? HIT_COLORS.punch;
       api.burst(v, color, special ? 70 : 28, special ? 9 : 6);
       api.burst(v, '#ffffff', special ? 18 : 8, 4);
-      if (special || h.move === 'kick') api.ring(v, color, special ? 2.6 : 0.9, special ? 0.45 : 0.25);
+      if (special || h.move === 'heavy') api.ring(v, color, special ? 2.6 : 0.9, special ? 0.45 : 0.25);
       v.set(target.x + side * -0.35, target.y + 2.1, 0.6);
       api.number(v, `-${h.amount}`, special ? '#fde047' : h.target === 'player' ? '#ff5a5a' : '#ffffff');
       f.shake = special ? 0.4 : 0.22;
