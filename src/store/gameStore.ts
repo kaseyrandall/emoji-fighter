@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { GameState, Character, Move } from '../types/game';
+import { GameState, Character, Move, AttackMove } from '../types/game';
 import { characters } from '../data/characters';
 import { stages } from '../data/stages';
 
@@ -128,6 +128,7 @@ const freshBout = () => ({
   moveDir: 0,
   playerVel: 0,
   specialMeter: 0,
+  opponentMove: null,
 });
 
 interface GameStore extends GameState {
@@ -152,6 +153,12 @@ interface GameStore extends GameState {
   opponentPosition: number;
   isAttacking: boolean;
   isOpponentAttacking: boolean;
+  // Which attack the opponent is throwing (drives its 3D swing animation).
+  opponentMove: AttackMove | null;
+  // Bumped once per attack thrown, so the 3D rigs can start a swing on each
+  // new attack — even when two land inside the same 600ms isAttacking window.
+  playerAttackSeq: number;
+  opponentAttackSeq: number;
   setAttacking: (value: boolean) => void;
   startCountdown: () => void;
   opponentAttack: () => void;
@@ -189,6 +196,9 @@ export const useGameStore = create<GameStore>((set) => ({
   moveDir: 0,
   playerVel: 0,
   specialMeter: 0,
+  opponentMove: null,
+  playerAttackSeq: 0,
+  opponentAttackSeq: 0,
   setMoveDir: (dir) => set({ moveDir: Math.max(-1, Math.min(1, dir)) }),
   setAttacking: (value) => set({ isAttacking: value }),
 
@@ -285,7 +295,7 @@ export const useGameStore = create<GameStore>((set) => ({
     if (nowAttack - playerLastAttackAt < PLAYER_ATTACK_COOLDOWN) return;
     playerLastAttackAt = nowAttack;
 
-    set({ isAttacking: true, currentMove: move });
+    set({ isAttacking: true, currentMove: move, playerAttackSeq: state.playerAttackSeq + 1 });
     setTimeout(() => set({ isAttacking: false, currentMove: null }), 600);
 
     // Check if characters are close enough for hit detection
@@ -293,7 +303,7 @@ export const useGameStore = create<GameStore>((set) => ({
     const distance = Math.abs(state.playerPosition - state.opponentPosition);
     if (distance > HIT_RANGE) return; // No damage if too far apart
 
-    const damage = state.selectedCharacter?.moves[move] || 0;
+    const damage = state.selectedCharacter?.moves[move as AttackMove] || 0;
     const newOpponentHealth = Math.max(0, state.opponentHealth - damage);
     const hitEvent = { target: 'opponent' as const, amount: damage, move, seq: nextHit() };
 
@@ -323,7 +333,7 @@ export const useGameStore = create<GameStore>((set) => ({
     playerLastAttackAt = now;
 
     // Spend the meter on activation.
-    set({ isAttacking: true, currentMove: 'special', specialMeter: 0 });
+    set({ isAttacking: true, currentMove: 'special', specialMeter: 0, playerAttackSeq: state.playerAttackSeq + 1 });
     setTimeout(() => set({ isAttacking: false, currentMove: null }), 600);
 
     const distance = Math.abs(state.playerPosition - state.opponentPosition);
@@ -348,10 +358,10 @@ export const useGameStore = create<GameStore>((set) => ({
     const state = useGameStore.getState();
     if (state.gameStatus !== 'playing') return;
 
-    const moves: Move[] = ['punch', 'kick', 'special'];
+    const moves: AttackMove[] = ['punch', 'kick', 'special'];
     const randomMove = moves[Math.floor(Math.random() * moves.length)];
 
-    set({ isOpponentAttacking: true });
+    set({ isOpponentAttacking: true, opponentMove: randomMove, opponentAttackSeq: state.opponentAttackSeq + 1 });
     setTimeout(() => set({ isOpponentAttacking: false }), 600);
 
     // Check if characters are close enough for hit detection
@@ -583,6 +593,7 @@ export const useGameStore = create<GameStore>((set) => ({
       isAttacking: false,
       isOpponentAttacking: false,
       currentMove: null,
+      opponentMove: null,
       moveDir: 0,
       playerVel: 0,
       isJumping: false

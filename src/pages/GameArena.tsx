@@ -1,33 +1,15 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ReactGA from 'react-ga4';
-import { motion, AnimatePresence, useAnimationControls } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import UIFx from 'uifx';
-import { useGameStore, JUMP_PEAK } from '../store/gameStore';
+import { useShallow } from 'zustand/react/shallow';
+import { useGameStore } from '../store/gameStore';
 import { Play, RotateCcw, Swords, Info } from 'lucide-react';
-import { stages } from '../data/stages';
 import Joystick from '../components/Joystick';
 import Credits from '../components/Credits';
 import { ArenaHud } from '../components/ArenaHud';
-import { StageBackdrop } from '../components/StageBackdrop';
-
-// The store animates a jump to a fixed peak (see JUMP_PEAK in gameStore). On a
-// short landscape phone that arc carries the fighter off the top of the screen,
-// so the arena scales it to the headroom it actually has. playerY is purely
-// presentational — nothing in hit detection reads it — so scaling only changes
-// how high the jump looks, never whether an attack lands.
-
-// Breathing room kept between the top of the fighter's head and the top of the
-// screen at the peak of a jump.
-const JUMP_CEILING_GAP = 8;
-
-interface FloatingHit {
-  id: number;
-  amount: number;
-  target: 'player' | 'opponent';
-  x: number;
-  special: boolean;
-}
+import ArenaScene from '../three/ArenaScene';
 
 export default function GameArena() {
   const navigate = useNavigate();
@@ -45,7 +27,10 @@ export default function GameArena() {
     winSound.current = new UIFx('./assets/victory.wav', { volume: 0.7 });
     loseSound.current = new UIFx('./assets/defeat.wav', { volume: 0.7 });
   }, []);
-  
+
+  // Only the values the DOM overlays show. Positions, jumps and hit events
+  // change every frame and are read by the 3D scene directly, so subscribing
+  // to them here would re-render this whole tree at 60fps.
   const {
     selectedCharacter,
     opponent,
@@ -53,45 +38,41 @@ export default function GameArena() {
     opponentHealth,
     gameStatus,
     countdown,
-    performMove,
-    resetGame,
-    togglePause,
-    pauseGame,
-    resumeGame,
-    isAttacking,
     currentMove,
-    currentStage,
-    startCountdown,
     timer,
     round,
     roundLoser,
     playerWins,
     opponentWins,
-    playerPosition,
-    playerY,
-    opponentPosition,
-    opponentY,
-    isOpponentAttacking,
-    hitEvent,
     gauntletStage,
     gauntletOpponents,
-    advanceGauntlet,
-    playerFacing,
-    setMoveDir,
-    performSpecial,
-    specialMeter
-  } = useGameStore();
+    specialMeter,
+  } = useGameStore(
+    useShallow((s) => ({
+      selectedCharacter: s.selectedCharacter,
+      opponent: s.opponent,
+      playerHealth: s.playerHealth,
+      opponentHealth: s.opponentHealth,
+      gameStatus: s.gameStatus,
+      countdown: s.countdown,
+      currentMove: s.currentMove,
+      timer: s.timer,
+      round: s.round,
+      roundLoser: s.roundLoser,
+      playerWins: s.playerWins,
+      opponentWins: s.opponentWins,
+      gauntletStage: s.gauntletStage,
+      gauntletOpponents: s.gauntletOpponents,
+      specialMeter: s.specialMeter,
+    }))
+  );
+  // Actions are stable references.
+  const { performMove, resetGame, togglePause, pauseGame, resumeGame, startCountdown, advanceGauntlet, setMoveDir, performSpecial } =
+    useGameStore.getState();
 
   // Super meter: charged by landing punches/kicks; the special fires only when full.
   const specialReady = specialMeter >= 100;
-  // The charged aura / glow should only pulse during live play — not linger on
-  // the pause, KO or result screens.
-  const chargedGlow = specialReady && gameStatus === 'playing';
-  // The loser stays knocked down through the KO beat and, when the match ends,
-  // the result screen too.
-  const koScreen =
-    gameStatus === 'roundEnd' || gameStatus === 'won' || gameStatus === 'lost' || gameStatus === 'champion';
-  const useSpecial = () => {
+  const fireSpecial = () => {
     const s = useGameStore.getState();
     if (s.gameStatus === 'playing' && s.specialMeter >= 100) {
       performSpecial();
@@ -99,200 +80,19 @@ export default function GameArena() {
     }
   };
 
-  const stage = stages.find(s => s.id === currentStage);
   const nextOpponent = gauntletOpponents[gauntletStage + 1];
 
-  // --- Hit VFX: screen shake, red flash, floating damage numbers ---
-  const arenaControls = useAnimationControls();
-  const [floatingHits, setFloatingHits] = useState<FloatingHit[]>([]);
-  const [flash, setFlash] = useState<'player' | 'opponent' | null>(null);
-  // Special-cast VFX: an expanding shockwave at the player + a brief screen flash.
-  const [specialBurst, setSpecialBurst] = useState<{ id: number; x: number; y: number } | null>(null);
   const [castFlash, setCastFlash] = useState(false);
   const [showCredits, setShowCredits] = useState(false);
-  const lastHitSeq = useRef<number>(0);
-  const hitTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const arenaRef = useRef<HTMLDivElement>(null);
-  const fighterRef = useRef<HTMLDivElement>(null);
-  const [jumpScale, setJumpScale] = useState(1);
 
-  // Measure how far the fighter can rise before leaving the screen. The ceiling
-  // is the top of the viewport, not the underside of the HUD: at the top of a
-  // big jump the head passes behind the health bars for a moment, which reads
-  // fine and leaves the arc nearly intact. Holding it below the HUD instead
-  // would cap a 375px-tall phone at ~75px, which is a hop, not a jump.
-  React.useLayoutEffect(() => {
-    const arena = arenaRef.current;
-    const fighter = fighterRef.current;
-    if (!arena || !fighter) return;
-
-    const measure = () => {
-      // Skip until both boxes are laid out, otherwise we'd latch a scale
-      // derived from a zero height and the jump would flatten.
-      if (!arena.clientHeight || !fighter.offsetHeight) return;
-      const cs = getComputedStyle(arena);
-      // Resting top of the fighter, derived from the arena box and the
-      // fighter's own height — both independent of its current jump offset, so
-      // a resize or rotation mid-jump still measures the resting geometry.
-      const restTop =
-        arena.getBoundingClientRect().bottom -
-        parseFloat(cs.paddingBottom) -
-        fighter.offsetHeight;
-      const headroom = restTop - JUMP_CEILING_GAP;
-      setJumpScale(Math.max(0, Math.min(1, headroom / JUMP_PEAK)));
-    };
-
-    // Observing both boxes re-measures when either settles — the emoji resizes
-    // at the sm/lg breakpoints and once its font loads, and the observer fires
-    // on observe(), so the first reading is taken after layout rather than
-    // during it.
-    const ro = new ResizeObserver(measure);
-    ro.observe(arena);
-    ro.observe(fighter);
-    window.addEventListener('resize', measure);
-    window.addEventListener('orientationchange', measure);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener('resize', measure);
-      window.removeEventListener('orientationchange', measure);
-    };
-  }, [gameStatus, selectedCharacter?.emoji]);
-
-  useEffect(() => {
-    if (!hitEvent) return;
-    // Process each hit exactly once (StrictMode double-invokes effects in dev,
-    // which would otherwise re-add an already-exiting number with the same key).
-    if (hitEvent.seq === lastHitSeq.current) return;
-    lastHitSeq.current = hitEvent.seq;
-    const special = hitEvent.move === 'special';
-
-    // Screen shake, bigger on specials
-    const mag = special ? 14 : 7;
-    arenaControls.start({
-      x: [0, -mag, mag, -mag / 2, mag / 2, 0],
-      transition: { duration: special ? 0.4 : 0.25 }
-    });
-
-    // Red flash on the struck fighter. Clear only if this same flash is still
-    // showing, so a newer hit on the other fighter isn't wiped early.
-    const target = hitEvent.target;
-    setFlash(target);
-    const flashTimer = setTimeout(() => setFlash(f => (f === target ? null : f)), 150);
-
-    // Floating damage number on the struck fighter — keep only the latest per
-    // fighter so rapid hits replace rather than pile up into an unreadable smear.
-    const x = target === 'player' ? playerPosition : opponentPosition;
-    const fh: FloatingHit = { id: hitEvent.seq, amount: hitEvent.amount, target, x, special };
-    setFloatingHits(prev => [...prev.filter(h => h.target !== fh.target), fh]);
-    // Each number removes itself by id. Crucially this timer is NOT cleared when
-    // the next hit lands: a following hit on the OTHER fighter would otherwise
-    // cancel this removal and leave the number stuck on screen across rounds.
-    const numTimer = setTimeout(() => {
-      setFloatingHits(prev => prev.filter(h => h.id !== fh.id));
-    }, 550);
-    hitTimers.current.push(flashTimer, numTimer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hitEvent?.seq]);
-
-  // Clear any pending hit timers on unmount, and wipe leftover VFX whenever a
-  // fresh round or match begins so nothing carries over.
-  useEffect(() => () => { hitTimers.current.forEach(clearTimeout); hitTimers.current = []; }, []);
-  useEffect(() => {
-    if (gameStatus === 'intro' || gameStatus === 'ready') {
-      setFloatingHits([]);
-      setFlash(null);
-      setCastFlash(false);
-      setSpecialBurst(null);
-    }
-  }, [gameStatus]);
-
-  // Fire the special-cast burst when the player launches a special. Timers are
-  // NOT cancelled on re-run (currentMove flips back to null at 600ms), so the
-  // flash/burst always clear themselves instead of lingering on screen.
+  // Brief purple wash when the player casts their super (the 3D scene handles
+  // the rings / sparks / camera punch-in).
   useEffect(() => {
     if (currentMove !== 'special') return;
-    const s = useGameStore.getState();
-    const id = Date.now();
-    setSpecialBurst({ id, x: s.playerPosition, y: s.playerY * jumpScale });
     setCastFlash(true);
-    hitTimers.current.push(
-      setTimeout(() => setCastFlash(false), 220),
-      setTimeout(() => setSpecialBurst(b => (b && b.id === id ? null : b)), 800)
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const t = setTimeout(() => setCastFlash(false), 220);
+    return () => clearTimeout(t);
   }, [currentMove]);
-
-  const getPlayerAnimation = () => {
-    // Face the last-moved direction: default facing "right" is the flipped emoji.
-    const facX = playerFacing === 'right' ? -1 : 1;
-
-    // The loser stays down through the KO beat and the end-of-match result
-    // screen; the round winner does a quick victory hop during the beat only.
-    if (roundLoser === 'player' && koScreen) {
-      return { scaleX: facX, rotate: -78, y: 28, opacity: 0.7, transition: { duration: 0.5, ease: 'backOut' } };
-    }
-    if (gameStatus === 'roundEnd') {
-      return { scaleX: facX, y: [0, -20, 0], transition: { duration: 0.5, repeat: 2, ease: 'easeOut' } };
-    }
-
-    // Explicitly reset rotate/y/opacity here: once the KO pose sets them, an
-    // animation target that omits them would leave the fighter stuck toppled.
-    if (!isAttacking) return { scaleX: facX, rotate: 0, y: 0, opacity: 1 };
-
-    const duration = 0.4;
-
-    switch (currentMove) {
-      case 'punch':
-        return {
-          scaleX: facX,
-          rotate: [0, -15, 0],
-          y: 0,
-          opacity: 1,
-          transition: { duration }
-        };
-      case 'kick':
-        return {
-          scaleX: facX,
-          rotate: [0, 45, 0],
-          y: 0,
-          opacity: 1,
-          transition: { duration }
-        };
-      case 'special':
-        return {
-          scaleX: facX,
-          scaleY: [1, 1.2, 1],
-          rotate: [0, 45, 0],
-          y: 0,
-          opacity: 1,
-          transition: { duration: 0.6 }
-        };
-      default:
-        return { scaleX: facX, rotate: 0, y: 0, opacity: 1 };
-    }
-  };
-
-  const getOpponentAnimation = () => {
-    // The loser stays down through the KO beat and the end-of-match result
-    // screen; the round winner does a quick victory hop during the beat only.
-    if (roundLoser === 'opponent' && koScreen) {
-      return { rotate: 78, y: 28, opacity: 0.7, transition: { duration: 0.5, ease: 'backOut' } };
-    }
-    if (gameStatus === 'roundEnd') {
-      return { y: [0, -20, 0], transition: { duration: 0.5, repeat: 2, ease: 'easeOut' } };
-    }
-
-    // Reset rotate/y/opacity so a fighter that toppled on a KO stands back up
-    // for the next round / match instead of staying rotated.
-    if (!isOpponentAttacking) return { rotate: 0, y: 0, opacity: 1 };
-
-    return {
-      rotate: [0, -20, 0],
-      y: 0,
-      opacity: 1,
-      transition: { duration: 0.4 }
-    };
-  };
 
   useEffect(() => {
     if (!selectedCharacter || !opponent) {
@@ -361,7 +161,7 @@ export default function GameArena() {
           playMoveSound('kick');
           break;
         case 'l':
-          useSpecial();
+          fireSpecial();
           break;
         case 'a':
           setMoveDir(-1);
@@ -424,9 +224,11 @@ export default function GameArena() {
 
   return (
     <div className="relative h-[100dvh] flex flex-col items-center justify-between overflow-hidden">
-      {/* Stage image + ambient blend (memoized: off the per-frame render path) */}
-      <StageBackdrop background={stage?.background} ambientLight={stage?.ambientLight} />
-      
+      {/* The fight itself: a full-screen three.js scene under the DOM HUD. */}
+      <div className="absolute inset-0">
+        <ArenaScene />
+      </div>
+
       <ArenaHud
         player={selectedCharacter}
         opponent={opponent}
@@ -442,155 +244,6 @@ export default function GameArena() {
         showPause={gameStatus === 'playing'}
         onPause={pauseGame}
       />
-
-      {/* Arena — the bottom inset sets the fighters' ground line. It keeps them
-          standing back on the stage floor instead of at its front lip, and on
-          touch layouts it lifts them clear of the joystick and attack pads. */}
-      <div ref={arenaRef} className="relative flex-1 w-full flex flex-col justify-end pb-10 lg:pb-16">
-        {/* Floor */}
-        <div className={`absolute bottom-0 w-full h-48 ${stage?.floorColor}`} />
-        
-        <motion.div
-          className="relative flex items-end justify-around w-full max-w-4xl mx-auto"
-          animate={arenaControls}
-        >
-          {/* Floating damage numbers — centered over the struck fighter, kept clear of the top HUD */}
-          <AnimatePresence>
-            {floatingHits.map(h => (
-              <motion.div
-                key={h.id}
-                className={`absolute pointer-events-none font-arcade font-bold z-20 ${
-                  h.special ? 'text-yellow-300 text-lg lg:text-4xl' : 'text-red-500 text-base lg:text-3xl'
-                } drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]`}
-                style={{ left: `${h.x}%`, bottom: '90px', x: '-50%' }}
-                initial={{ opacity: 0, y: 0, scale: 0.6 }}
-                animate={{ opacity: 1, y: -25, scale: 1 }}
-                exit={{ opacity: 0, transition: { duration: 0.15 } }}
-                transition={{ duration: 0.4, ease: 'easeOut' }}
-              >
-                -{h.amount}
-              </motion.div>
-            ))}
-          </AnimatePresence>
-
-          <motion.div
-            ref={fighterRef}
-            className="text-[5.5rem] sm:text-[6.5rem] lg:text-[9rem] absolute"
-            style={{
-              left: `${playerPosition}%`,
-              bottom: `${playerY * jumpScale}px`,
-              transition: 'bottom 0.08s linear',
-              filter: flash === 'player'
-                ? 'brightness(1.9) drop-shadow(0 0 22px rgba(255,40,40,0.95))'
-                : chargedGlow
-                ? 'drop-shadow(0 0 22px rgba(216,180,254,0.9))'
-                : 'drop-shadow(0 0 15px rgba(255,255,255,0.5))'
-            }}
-            animate={getPlayerAnimation()}
-            transition={{
-              duration: 0.25,
-              ease: currentMove === 'special' ? "backOut" : "easeInOut"
-            }}
-          >
-            {/* Charged aura — a pulsing halo while the super meter is full. */}
-            {chargedGlow && (
-              <>
-                <motion.span
-                  className="absolute left-1/2 top-1/2 rounded-full pointer-events-none"
-                  style={{ width: '1.15em', height: '1.15em', x: '-50%', y: '-50%',
-                    background: 'radial-gradient(circle, rgba(216,180,254,0.55), rgba(168,85,247,0.15) 55%, transparent 72%)' }}
-                  animate={{ scale: [1, 1.28, 1], opacity: [0.65, 1, 0.65] }}
-                  transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
-                />
-                {[0, 1, 2].map((i) => (
-                  <motion.span
-                    key={i}
-                    className="absolute left-1/2 top-1/2 text-[0.22em] pointer-events-none"
-                    style={{ x: '-50%', y: '-50%' }}
-                    animate={{
-                      rotate: [i * 120, i * 120 + 360],
-                      opacity: [0.4, 1, 0.4],
-                    }}
-                    transition={{ duration: 2.4, repeat: Infinity, ease: 'linear' }}
-                  >
-                    <span className="inline-block" style={{ transform: 'translateY(-0.75em)' }}>✨</span>
-                  </motion.span>
-                ))}
-              </>
-            )}
-            {selectedCharacter.emoji}
-          </motion.div>
-          <motion.div
-            className="text-[5.5rem] sm:text-[6.5rem] lg:text-[9rem] absolute"
-            style={{
-              left: `${opponentPosition}%`,
-              bottom: `${opponentY * jumpScale}px`,
-              transition: 'bottom 0.08s linear',
-              filter: flash === 'opponent'
-                ? 'brightness(1.9) drop-shadow(0 0 22px rgba(255,40,40,0.95))'
-                : 'drop-shadow(0 0 15px rgba(255,255,255,0.5))'
-            }}
-            animate={getOpponentAnimation()}
-            transition={{
-              duration: 0.6,
-              ease: "backOut"
-            }}
-          >
-            {opponent.emoji}
-          </motion.div>
-
-          {/* Special-cast shockwave + sparkle burst at the player. */}
-          <AnimatePresence>
-            {specialBurst && (
-              <div
-                key={specialBurst.id}
-                className="absolute pointer-events-none z-10"
-                style={{ left: `${specialBurst.x}%`, bottom: `${specialBurst.y + 44}px`, transform: 'translateX(-10%)' }}
-              >
-                {/* expanding rings */}
-                {[0, 1].map((i) => (
-                  <motion.span
-                    key={i}
-                    className="absolute rounded-full"
-                    style={{ left: 0, top: 0, x: '-50%', y: '-50%', border: '3px solid rgba(216,180,254,0.9)' }}
-                    initial={{ width: 12, height: 12, opacity: 0.9 }}
-                    animate={{ width: 150 + i * 60, height: 150 + i * 60, opacity: 0 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.55, ease: 'easeOut', delay: i * 0.08 }}
-                  />
-                ))}
-                {/* core flash */}
-                <motion.span
-                  className="absolute rounded-full"
-                  style={{ left: 0, top: 0, x: '-50%', y: '-50%',
-                    background: 'radial-gradient(circle, rgba(255,255,255,0.95), rgba(216,180,254,0.6) 45%, transparent 70%)' }}
-                  initial={{ width: 70, height: 70, opacity: 0.95 }}
-                  animate={{ width: 20, height: 20, opacity: 0 }}
-                  transition={{ duration: 0.35, ease: 'easeOut' }}
-                />
-                {/* sparkle particles flying outward */}
-                {[0, 60, 120, 180, 240, 300].map((deg) => (
-                  <motion.span
-                    key={deg}
-                    className="absolute text-xl lg:text-2xl"
-                    style={{ left: 0, top: 0 }}
-                    initial={{ x: '-50%', y: '-50%', opacity: 1, scale: 0.6 }}
-                    animate={{
-                      x: `calc(-50% + ${Math.cos((deg * Math.PI) / 180) * 70}px)`,
-                      y: `calc(-50% + ${Math.sin((deg * Math.PI) / 180) * 70}px)`,
-                      opacity: 0,
-                      scale: 1.1,
-                    }}
-                    transition={{ duration: 0.6, ease: 'easeOut' }}
-                  >
-                    ✨
-                  </motion.span>
-                ))}
-              </div>
-            )}
-          </AnimatePresence>
-        </motion.div>
-      </div>
 
       {/* Brief purple wash when a special is cast. */}
       <AnimatePresence>
@@ -630,7 +283,7 @@ export default function GameArena() {
 
       {/* VS intro / loading screen shown before each gauntlet bout */}
       {gameStatus === 'intro' && (
-        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center z-20 px-4">
+        <div className="fixed inset-0 bg-gradient-to-b from-black/70 via-black/35 to-black/70 flex flex-col items-center justify-center z-20 px-4">
           {gauntletOpponents.length > 0 && (
             <motion.div
               initial={{ opacity: 0, y: -20 }}
@@ -685,7 +338,7 @@ export default function GameArena() {
 
       {/* Game Status Overlay */}
       {(gameStatus === 'ready' || gameStatus === 'paused' || gameStatus === 'won' || gameStatus === 'lost' || gameStatus === 'champion') && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-10">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-10">
           <div className="text-center relative">
             {gameStatus === 'ready' && countdown > 0 && (
               <motion.h2
@@ -807,7 +460,7 @@ export default function GameArena() {
             {/* Special apex — always visible; the ring fills as the super meter
                 charges and the whole button glows once it's ready. */}
             <motion.button
-              onClick={useSpecial}
+              onClick={fireSpecial}
               className="game-button absolute top-0 left-1/2 -translate-x-1/2 w-16 h-16 rounded-full flex items-center justify-center text-2xl overflow-hidden focus:outline-none active:brightness-110"
               style={{
                 background: 'radial-gradient(circle at 50% 35%, #a855f7, #6b21a8)',

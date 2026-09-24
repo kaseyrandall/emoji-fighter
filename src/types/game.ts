@@ -53,7 +53,8 @@ export interface HitEvent {
   seq: number;
 }
 
-export type Move = 'punch' | 'kick' | 'special' | 'left' | 'right' | 'jump';
+export type AttackMove = 'punch' | 'kick' | 'special';
+export type Move = AttackMove | 'left' | 'right' | 'jump';
 
 export interface Stage {
   id: string;

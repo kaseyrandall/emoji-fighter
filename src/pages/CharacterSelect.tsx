@@ -7,15 +7,9 @@ import { stages } from '../data/stages';
 import { useGameStore, GAUNTLET_SIZE } from '../store/gameStore';
 import { Swords, Sparkles, ArrowLeft, ChevronRight } from 'lucide-react';
 import { Character } from '../types/game';
+import { accentOf } from '../data/accents';
+import FighterPreview from '../three/FighterPreview';
 
-// Signature colour per fighter — drives glows, stat bars and the backdrop tint.
-const ACCENTS: Record<string, string> = {
-  ninja: '#818cf8', robot: '#22d3ee', alien: '#a78bfa', dragon: '#10b981',
-  poop: '#d97706', ghost: '#cbd5e1', zombie: '#84cc16', trex: '#22c55e',
-  octopus: '#f472b6', gorilla: '#9ca3af', devil: '#a855f7', ice: '#38bdf8',
-  chicken: '#facc15', unicorn: '#e879f9', clown: '#ef4444',
-};
-const accentOf = (id: string) => ACCENTS[id] ?? '#f59e0b';
 
 const overallOf = (c: Character) =>
   Math.round(((c.stats.power + c.stats.speed + c.stats.technique) / 3) * 10) / 10;
@@ -209,26 +203,22 @@ export default function CharacterSelect() {
           </div>
         </div>
 
-        {/* Hero */}
-        <motion.div
-          key={selected.id}
-          initial={{ opacity: 0, x: 12 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.2 }}
-          className="w-[32%] max-w-[16rem] shrink-0 flex flex-col min-h-0"
-        >
-          <div className="flex-1 min-h-0 flex items-center justify-center overflow-hidden">
-            <motion.span
-              className="leading-none text-5xl sm:text-7xl lg:text-8xl"
-              style={{ filter: `drop-shadow(0 6px 18px ${accent}aa)` }}
-              animate={{ y: [0, -6, 0] }}
-              transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-            >
-              {selected.emoji}
-            </motion.span>
+        {/* Hero — the 3D preview stays mounted (one WebGL context) and swaps
+            fighters in place; only the text block re-animates per pick. */}
+        <div className="w-[32%] max-w-[16rem] shrink-0 flex flex-col min-h-0">
+          <div className="relative flex-1 min-h-0 -mx-2">
+            <div className="absolute inset-0">
+              <FighterPreview character={selected} />
+            </div>
           </div>
 
-          <div className="shrink-0">
+          <motion.div
+            key={selected.id}
+            initial={{ opacity: 0, x: 12 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.2 }}
+            className="shrink-0"
+          >
             <div className="flex items-start gap-1.5">
               <h3 className="flex-1 min-w-0 font-bold text-lg sm:text-xl leading-[1.05] break-words line-clamp-2" style={{ textShadow: `0 0 14px ${accent}88` }}>
                 {selected.name}
@@ -251,7 +241,7 @@ export default function CharacterSelect() {
               <StatBar label="SPD" value={selected.stats.speed} accent={accent} />
               <StatBar label="TEC" value={selected.stats.technique} accent={accent} />
             </div>
-          </div>
+          </motion.div>
 
           <motion.button
             onClick={handleFight}
@@ -264,7 +254,7 @@ export default function CharacterSelect() {
             <Swords size={18} />
             FIGHT
           </motion.button>
-        </motion.div>
+        </div>
       </div>
     </div>
   );
