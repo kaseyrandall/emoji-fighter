@@ -25,6 +25,10 @@ const PLAYER_FRICTION = 0.8; // velocity retained per tick when no input
 // AI timing state for the current round (reset when a round's AI loop starts).
 let aiLastAttackAt = 0;
 let aiEnteredRangeAt = 0;
+let aiLastCrossAt = 0;
+// An in-progress AI cross-up: the opponent jumps over the player to land at
+// `target`, drifting `step` units per movement tick while airborne.
+let oppCross: { target: number; step: number } | undefined;
 
 // Single-instance loop handles so a new round never leaves an old loop running
 // (leaked loops would fight over movement and appear to "break" the controls).
@@ -46,6 +50,7 @@ const clearRoundLoops = () => {
   if (roundTimerLoop) { clearInterval(roundTimerLoop); roundTimerLoop = undefined; }
   if (playerJumpLoop) { clearInterval(playerJumpLoop); playerJumpLoop = undefined; }
   if (oppJumpLoop) { clearInterval(oppJumpLoop); oppJumpLoop = undefined; }
+  oppCross = undefined;
   if (roundEndTimeout) { clearTimeout(roundEndTimeout); roundEndTimeout = undefined; }
 };
 
@@ -113,9 +118,16 @@ const randomStageId = () => stages[Math.floor(Math.random() * stages.length)].id
 // Peak of the jump arc, in px. The arena scales this down when a short
 // viewport can't fit the whole arc (see jumpScale in GameArena).
 export const JUMP_PEAK = 230;
+const JUMP_STEP = 16;
 // Above this height a fighter is "over" the other one and can pass across.
 const CLEAR_HEIGHT = JUMP_PEAK * 0.2;
-const JUMP_STEP = 16;
+// The opponent's jump arc, and how many 16ms ticks it spends in the air.
+const OPP_JUMP_PEAK = JUMP_PEAK * 0.85;
+const OPP_JUMP_TICKS = 2 * Math.ceil(OPP_JUMP_PEAK / JUMP_STEP);
+// AI cross-ups: how far past the player it lands, and the minimum gap
+// between two of them (shrinks as the gauntlet gets harder).
+const CROSS_UP_LAND = 14;
+const crossUpGapMs = (stage: number) => Math.max(1800, 4000 - stage * 400);
 
 // State shared by startGauntlet / advanceGauntlet when a fresh bout begins.
 // Bouts open on the 'intro' VS screen; the arena starts the countdown after it.
@@ -407,10 +419,11 @@ export const useGameStore = create<GameStore>((set) => ({
     // Reset per-round attack timing so each bout starts with a fair reaction window.
     aiLastAttackAt = 0;
     aiEnteredRangeAt = 0;
+    aiLastCrossAt = Date.now(); // no cross-up in the opening moments
+    oppCross = undefined;
 
     // A tracked arc for the opponent, mirroring the player's jump. Guarded so
     // only one runs at a time and it stops if the round ends mid-air.
-    const OPP_JUMP_PEAK = JUMP_PEAK * 0.85;
     const startOppJump = () => {
       if (oppJumpLoop) return; // already airborne
       let h = 0;
@@ -418,6 +431,7 @@ export const useGameStore = create<GameStore>((set) => ({
       oppJumpLoop = setInterval(() => {
         if (useGameStore.getState().gameStatus !== 'playing') {
           if (oppJumpLoop) { clearInterval(oppJumpLoop); oppJumpLoop = undefined; }
+          oppCross = undefined;
           set({ opponentY: 0 });
           return;
         }
@@ -425,6 +439,7 @@ export const useGameStore = create<GameStore>((set) => ({
         if (h >= OPP_JUMP_PEAK) { h = OPP_JUMP_PEAK; dir = -1; }
         if (h <= 0) {
           if (oppJumpLoop) { clearInterval(oppJumpLoop); oppJumpLoop = undefined; }
+          oppCross = undefined;
           set({ opponentY: 0 });
           return;
         }
@@ -462,6 +477,24 @@ export const useGameStore = create<GameStore>((set) => ({
 
       const reacted = now - aiEnteredRangeAt >= diff.reactionMs;
       const offCooldown = now - aiLastAttackAt >= diff.cooldownMs;
+
+      // Mid cross-up: no attacks until it has landed on the other side.
+      if (oppCross) return;
+
+      // Now and then, jump right over the player and land behind them —
+      // more often, and sooner after the last one, as the gauntlet climbs.
+      const crossChance = Math.max(0, Math.min(0.03, 0.006 + stage * 0.004));
+      if (!airborne && reacted && now - aiLastCrossAt >= crossUpGapMs(stage) && Math.random() < crossChance) {
+        const dir = Math.sign(state.playerPosition - state.opponentPosition) || 1;
+        const target = state.playerPosition + dir * CROSS_UP_LAND;
+        // Only if there's room to land behind the player (not pinned to a wall).
+        if (target >= POS_MIN && target <= POS_MAX) {
+          aiLastCrossAt = now;
+          oppCross = { target, step: Math.abs(target - state.opponentPosition) / (OPP_JUMP_TICKS - 2) };
+          startOppJump();
+          return;
+        }
+      }
 
       // React to the player leaping: contest the air / anti-air by jumping too.
       if (!airborne && playerAirborne && Math.random() < jumpChance * 2) {
@@ -523,9 +556,13 @@ export const useGameStore = create<GameStore>((set) => ({
         }
       }
 
-      // Opponent approach at the same 60fps cadence (moveSpeed is tuned per
-      // 50ms, so scale it down to this tick).
-      if (Math.abs(pos - oppPos) > HIT_RANGE) {
+      // Opponent: mid cross-up it drifts over the player toward its landing
+      // spot; otherwise it approaches at the same 60fps cadence (moveSpeed is
+      // tuned per 50ms, so scale it down to this tick).
+      if (oppCross) {
+        const d = oppCross.target - oppPos;
+        oppPos = Math.max(POS_MIN, Math.min(POS_MAX, oppPos + Math.sign(d) * Math.min(Math.abs(d), oppCross.step)));
+      } else if (Math.abs(pos - oppPos) > HIT_RANGE) {
         const diff = difficultyForStage(s.gauntletStage + DIFF_OFFSET[s.difficulty]);
         const oppStep = diff.moveSpeed * (MOVE_TICK_MS / 50);
         oppPos = pos < oppPos
