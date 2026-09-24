@@ -8,7 +8,7 @@ import { glowTexture, shadowTexture } from './textures';
 
 interface FighterProps {
   emoji: string;
-  accent: string;
+  auraColor?: string; // charged-aura tint (the fighter's special colour)
   read: () => FighterInput;
   // Multiplier on animation time — the arena drops it for hitstop / KO slow-mo.
   timeScale?: () => number;
@@ -18,7 +18,6 @@ interface FighterProps {
 const BODY = 1.8; // glyph size in world units
 const ATTACK_DUR: Record<AttackMove, number> = { punch: 0.3, kick: 0.42, special: 0.65 };
 
-const sphere = new THREE.SphereGeometry(1, 20, 14);
 const circle = new THREE.PlaneGeometry(1, 1);
 
 const easeOut = (t: number) => 1 - (1 - t) * (1 - t);
@@ -34,40 +33,41 @@ const strike = (p: number, peak: number) =>
 // glyphs naturally face; the rig turns 180° to face right).
 const LEAD_GLOVE = new THREE.Vector3(-0.95, 0.95, 0.45);
 const REAR_GLOVE = new THREE.Vector3(-0.55, 1.2, -0.4);
-const LEAD_BOOT = new THREE.Vector3(-0.35, 0.14, 0.25);
-const REAR_BOOT = new THREE.Vector3(0.4, 0.14, -0.2);
+const LEAD_BOOT = new THREE.Vector3(-0.35, 0.24, 0.25);
+const REAR_BOOT = new THREE.Vector3(0.4, 0.24, -0.2);
 const tmp = new THREE.Vector3();
+const pulseOf = (t: number) => Math.sin(t * 6);
+
+// Limbs are small emoji cutouts too. The 🥊 glyph punches toward screen-right,
+// so it's mirrored to point along the rig's forward (-X) axis.
+const GLOVE = '🥊';
+const BOOT = '👟';
+const GLOVE_SIZE = 0.62;
+const BOOT_SIZE = 0.55;
 
 // A Rayman-style emoji brawler: a thick stamped emoji body with floating
 // gloves and boots. Handles idle bounce, running lean, turning, jumping,
 // punch / kick / special swings, hit recoil + flash, the charged aura, and the
 // KO topple / victory hop — all procedurally, every frame.
-export function Fighter({ emoji, accent, read, timeScale, size = 1 }: FighterProps) {
+export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 1 }: FighterProps) {
   const root = React.useRef<THREE.Group>(null);
   const lift = React.useRef<THREE.Group>(null);
   const yaw = React.useRef<THREE.Group>(null);
   const body = React.useRef<THREE.Group>(null);
   const spin = React.useRef<THREE.Group>(null);
-  const leadGlove = React.useRef<THREE.Mesh>(null);
-  const rearGlove = React.useRef<THREE.Mesh>(null);
-  const leadBoot = React.useRef<THREE.Mesh>(null);
-  const rearBoot = React.useRef<THREE.Mesh>(null);
+  const leadGlove = React.useRef<THREE.Group>(null);
+  const rearGlove = React.useRef<THREE.Group>(null);
+  const leadBoot = React.useRef<THREE.Group>(null);
+  const rearBoot = React.useRef<THREE.Group>(null);
+  const gloveMats = React.useRef<EmojiMaterials[]>([]);
   const shadow = React.useRef<THREE.Mesh>(null);
   const aura = React.useRef<THREE.Sprite>(null);
   const sparkles = React.useRef<THREE.Group>(null);
   const mats = React.useRef<EmojiMaterials | null>(null);
 
-  const glove = React.useMemo(
-    () => new THREE.MeshStandardMaterial({ color: accent, roughness: 0.35, metalness: 0.1, emissive: accent, emissiveIntensity: 0.18 }),
-    [accent]
-  );
-  const boot = React.useMemo(
-    () => new THREE.MeshStandardMaterial({ color: new THREE.Color(accent).multiplyScalar(0.55), roughness: 0.5 }),
-    [accent]
-  );
   const auraMat = React.useMemo(
-    () => new THREE.SpriteMaterial({ map: glowTexture(), color: '#d8b4fe', transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }),
-    []
+    () => new THREE.SpriteMaterial({ map: glowTexture(), color: auraColor, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }),
+    [auraColor]
   );
   const sparkleMat = React.useMemo(
     () => new THREE.SpriteMaterial({ map: glowTexture(), color: '#fff3c4', transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }),
@@ -77,7 +77,6 @@ export function Fighter({ emoji, accent, read, timeScale, size = 1 }: FighterPro
     () => new THREE.MeshBasicMaterial({ map: shadowTexture(), transparent: true, depthWrite: false }),
     []
   );
-  React.useEffect(() => () => { glove.dispose(); boot.dispose(); }, [glove, boot]);
   React.useEffect(() => () => { auraMat.dispose(); sparkleMat.dispose(); shadowMat.dispose(); }, [auraMat, sparkleMat, shadowMat]);
 
   // Animation state, mutated in the frame loop (never triggers a React render).
@@ -232,8 +231,8 @@ export function Fighter({ emoji, accent, read, timeScale, size = 1 }: FighterPro
     spin.current!.rotation.y = spinY;
     leadGlove.current!.position.copy(lg);
     rearGlove.current!.position.copy(rg);
-    leadGlove.current!.scale.setScalar(0.24 * gloveScale);
-    rearGlove.current!.scale.setScalar(0.22 * gloveScale);
+    leadGlove.current!.scale.setScalar(gloveScale);
+    rearGlove.current!.scale.setScalar(0.9 * gloveScale);
     leadBoot.current!.position.copy(lb);
     rearBoot.current!.position.copy(rb);
     const bootsDown = 1 - a.ko;
@@ -251,7 +250,7 @@ export function Fighter({ emoji, accent, read, timeScale, size = 1 }: FighterPro
       m.face.emissive.setRGB(1, 1 - flash * 0.85, 1 - flash * 0.85);
       m.face.emissiveIntensity = 0.3 + flash * 0.9;
     }
-    glove.emissiveIntensity = 0.18 + a.charge * 0.5 + flash * 0.4;
+    for (const g of gloveMats.current) g.face.emissiveIntensity = 0.3 + a.charge * 0.35 * (1 + pulseOf(a.t));
 
     // Charged aura + orbiting sparkles.
     const pulse = 0.5 + 0.5 * Math.sin(a.t * 6);
@@ -283,10 +282,23 @@ export function Fighter({ emoji, accent, read, timeScale, size = 1 }: FighterPro
               <EmojiBody emoji={emoji} size={BODY} depth={0.34} layers={10} onMaterials={(m) => (mats.current = m)} />
             </group>
           </group>
-          <mesh ref={rearGlove} geometry={sphere} material={glove} />
-          <mesh ref={leadGlove} geometry={sphere} material={glove} />
-          <mesh ref={leadBoot} geometry={sphere} material={boot} scale={[0.26, 0.15, 0.2]} />
-          <mesh ref={rearBoot} geometry={sphere} material={boot} scale={[0.26, 0.15, 0.2]} />
+          {/* Rear limbs sit behind the body, lead limbs in front of it. */}
+          <group ref={rearGlove}>
+            <group scale={[-1, 1, 1]}>
+              <EmojiBody emoji={GLOVE} size={GLOVE_SIZE} depth={0.16} layers={4} onMaterials={(m) => (gloveMats.current[1] = m)} />
+            </group>
+          </group>
+          <group ref={leadGlove}>
+            <group scale={[-1, 1, 1]}>
+              <EmojiBody emoji={GLOVE} size={GLOVE_SIZE} depth={0.16} layers={4} onMaterials={(m) => (gloveMats.current[0] = m)} />
+            </group>
+          </group>
+          <group ref={leadBoot}>
+            <EmojiBody emoji={BOOT} size={BOOT_SIZE} depth={0.14} layers={4} />
+          </group>
+          <group ref={rearBoot}>
+            <EmojiBody emoji={BOOT} size={BOOT_SIZE} depth={0.14} layers={4} />
+          </group>
         </group>
       </group>
     </group>

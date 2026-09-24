@@ -3,12 +3,12 @@ import * as THREE from 'three';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { useGameStore, JUMP_PEAK } from '../store/gameStore';
 import { stages } from '../data/stages';
-import { accentOf } from '../data/accents';
 import { Character } from '../types/game';
 import { Fighter } from './Fighter';
 import { FighterInput, defaultFighterInput } from './fighterInput';
 import { Stage3D } from './Stage3D';
 import { Vfx, VfxApi } from './Vfx';
+import { specialStyleOf } from './specialStyles';
 
 // The game store still simulates the fight on its original 2D coordinates:
 // positions are a fighter's left edge as a % of the arena, jumps are px of
@@ -21,7 +21,7 @@ const toWorldY = (y: number) => (y / JUMP_PEAK) * JUMP_HEIGHT;
 // Store positions move ~60 steps a second; velocity in world units / second.
 const VEL_SCALE = WORLD_PER_POS * 60;
 
-const HIT_COLORS = { punch: '#ffd84d', kick: '#5fd0ff', special: '#e9b8ff' } as const;
+const HIT_COLORS = { punch: '#ffd84d', kick: '#5fd0ff' } as const;
 
 // Shared, frame-loop-only effect clocks (never trigger React renders).
 interface FxState {
@@ -154,8 +154,14 @@ function CameraRig({ fx }: { fx: React.MutableRefObject<FxState> }) {
 
 // Reacts to store events (hits, specials, KOs) with 3D effects.
 function EventFx({ fx, vfx }: { fx: React.MutableRefObject<FxState>; vfx: React.RefObject<VfxApi> }) {
-  const last = React.useRef({ hit: useGameStore.getState().hitEvent?.seq ?? 0, attack: useGameStore.getState().playerAttackSeq, status: useGameStore.getState().gameStatus });
+  const last = React.useRef({
+    hit: useGameStore.getState().hitEvent?.seq ?? 0,
+    attack: useGameStore.getState().playerAttackSeq,
+    oppAttack: useGameStore.getState().opponentAttackSeq,
+    status: useGameStore.getState().gameStatus,
+  });
   const v = React.useMemo(() => new THREE.Vector3(), []);
+  const target = React.useMemo(() => new THREE.Vector3(), []);
 
   useFrame((_, rawDt) => {
     const dt = Math.min(rawDt, 1 / 20);
@@ -177,14 +183,28 @@ function EventFx({ fx, vfx }: { fx: React.MutableRefObject<FxState>; vfx: React.
       last.current.status = s.gameStatus;
     }
 
-    // Player super cast.
+    // Specials: each character's own effect, aimed at the other fighter.
+    const px = toWorldX(s.playerPosition);
+    const ox = toWorldX(s.opponentPosition);
+    const castSpecial = (casterId: string | undefined, fromX: number, fromY: number, toX: number, toY: number) => {
+      const style = specialStyleOf(casterId);
+      v.set(fromX, fromY + 1.05, 0.1);
+      target.set(toX, toY + 1.05, 0.3);
+      api.ring(v, style.color, 1.8, 0.4);
+      api.special(style, v, Math.sign(toX - fromX) || 1, target);
+    };
     if (s.playerAttackSeq !== last.current.attack) {
       last.current.attack = s.playerAttackSeq;
       if (s.currentMove === 'special') {
-        v.set(toWorldX(s.playerPosition), toWorldY(s.playerY) + 1.05, 0.1);
-        api.ring(v, '#d8b4fe', 2.4, 0.5);
-        api.burst(v, '#f0d8ff', 40, 7);
+        castSpecial(s.selectedCharacter?.id, px, toWorldY(s.playerY), ox, toWorldY(s.opponentY));
         f.zoom = 1;
+      }
+    }
+    if (s.opponentAttackSeq !== last.current.oppAttack) {
+      last.current.oppAttack = s.opponentAttackSeq;
+      if (s.opponentMove === 'special') {
+        castSpecial(s.opponent?.id, ox, toWorldY(s.opponentY), px, toWorldY(s.playerY));
+        f.zoom = 0.6;
       }
     }
 
@@ -200,7 +220,11 @@ function EventFx({ fx, vfx }: { fx: React.MutableRefObject<FxState>; vfx: React.
       // Sparks fly from the side the blow came from.
       const side = Math.sign(attackerX - target.x) || 1;
       v.set(target.x + side * 0.55, target.y + (h.move === 'kick' ? 0.8 : 1.15), 0.4);
-      const color = HIT_COLORS[(h.move as keyof typeof HIT_COLORS) ?? 'punch'] ?? HIT_COLORS.punch;
+      // A special's impact sparks take the attacker's special colour.
+      const attacker = h.target === 'player' ? s.opponent : s.selectedCharacter;
+      const color = special
+        ? specialStyleOf(attacker?.id).color
+        : HIT_COLORS[(h.move as keyof typeof HIT_COLORS) ?? 'punch'] ?? HIT_COLORS.punch;
       api.burst(v, color, special ? 70 : 28, special ? 9 : 6);
       api.burst(v, '#ffffff', special ? 18 : 8, 4);
       if (special || h.move === 'kick') api.ring(v, color, special ? 2.6 : 0.9, special ? 0.45 : 0.25);
@@ -226,8 +250,8 @@ function Fighters({ player, opponent, fx }: { player: Character; opponent: Chara
   }, [fx]);
   return (
     <>
-      <Fighter emoji={player.emoji} accent={accentOf(player.id)} read={() => readPlayer(pIn.current)} timeScale={timeScale} />
-      <Fighter emoji={opponent.emoji} accent={accentOf(opponent.id)} read={() => readOpponent(oIn.current, oLast.current)} timeScale={timeScale} />
+      <Fighter emoji={player.emoji} auraColor={specialStyleOf(player.id).color} read={() => readPlayer(pIn.current)} timeScale={timeScale} />
+      <Fighter emoji={opponent.emoji} auraColor={specialStyleOf(opponent.id).color} read={() => readOpponent(oIn.current, oLast.current)} timeScale={timeScale} />
     </>
   );
 }

@@ -6,6 +6,8 @@ import { accentOf } from '../data/accents';
 import { Fighter } from './Fighter';
 import { defaultFighterInput } from './fighterInput';
 import { glowTexture } from './textures';
+import { Vfx, VfxApi } from './Vfx';
+import { specialStyleOf } from './specialStyles';
 
 const DEMO: AttackMove[] = ['punch', 'kick', 'punch', 'special'];
 
@@ -17,6 +19,8 @@ function Showcase({ character }: { character: Character }) {
   const pop = React.useRef<THREE.Group>(null);
   const input = React.useRef(defaultFighterInput(0, -1));
   const clock = React.useRef({ t: 0, next: 1.1, step: 0, popT: 0 });
+  const vfx = React.useRef<VfxApi>(null);
+  const style = specialStyleOf(character.id);
 
   useFrame((_, rawDt) => {
     const dt = Math.min(rawDt, 1 / 20);
@@ -30,6 +34,11 @@ function Showcase({ character }: { character: Character }) {
       inp.attackMove = m;
       inp.attackSeq++;
       c.next = c.t + (m === 'special' ? 1.8 : 1.0);
+      // Preview the fighter's own special effect.
+      if (m === 'special' && vfx.current) {
+        const from = new THREE.Vector3(0, 1.05, 0.1);
+        vfx.current.special(style, from, -1, new THREE.Vector3(-1.5, 1.05, 0.3));
+      }
     }
     inp.charged = DEMO[c.step % DEMO.length] === 'special';
     if (turntable.current) turntable.current.rotation.y = Math.sin(c.t * 0.5) * 0.55;
@@ -60,9 +69,10 @@ function Showcase({ character }: { character: Character }) {
           <meshBasicMaterial color={accent} toneMapped={false} />
         </mesh>
         <group ref={pop}>
-          <Fighter emoji={character.emoji} accent={accent} read={() => input.current} />
+          <Fighter emoji={character.emoji} auraColor={style.color} read={() => input.current} />
         </group>
       </group>
+      <Vfx ref={vfx} />
     </>
   );
 }

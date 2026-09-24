@@ -58,6 +58,9 @@ let playerLastAttackAt = 0;
 // connect at near-contact; the special reaches a little further. The AI uses
 // HIT_RANGE to decide it's close enough to start throwing attacks.
 const HIT_RANGE = 15;
+// Closest the two fighters' centres can get (bodies are ~12 units wide), so
+// they bump into each other instead of passing through.
+const MIN_SEPARATION = 11;
 const SPECIAL_RANGE = 19;
 
 // Super meter: landing punches/kicks charges it; the special can only fire when
@@ -491,6 +494,17 @@ export const useGameStore = create<GameStore>((set) => ({
       let pos = s.playerPosition + vel;
       if (pos <= POS_MIN) { pos = POS_MIN; vel = 0; }
       if (pos >= POS_MAX) { pos = POS_MAX; vel = 0; }
+
+      // Fighters are solid: the player can't walk (or jump) through the
+      // opponent, only up against them. Keep whichever side they're on now.
+      const side = s.playerPosition <= s.opponentPosition ? -1 : 1;
+      if (side < 0 && pos > s.opponentPosition - MIN_SEPARATION) {
+        pos = Math.max(s.playerPosition, s.opponentPosition - MIN_SEPARATION);
+        vel = 0;
+      } else if (side > 0 && pos < s.opponentPosition + MIN_SEPARATION) {
+        pos = Math.min(s.playerPosition, s.opponentPosition + MIN_SEPARATION);
+        vel = 0;
+      }
 
       // Opponent approach at the same 60fps cadence (moveSpeed is tuned per
       // 50ms, so scale it down to this tick).

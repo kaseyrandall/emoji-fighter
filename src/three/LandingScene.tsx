@@ -2,7 +2,7 @@ import React from 'react';
 import * as THREE from 'three';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { characters } from '../data/characters';
-import { accentOf } from '../data/accents';
+import { specialStyleOf } from './specialStyles';
 import { AttackMove } from '../types/game';
 import { EmojiBody } from './EmojiBody';
 import { Fighter } from './Fighter';
@@ -87,7 +87,7 @@ function Showboater({ id, x, facing, delay }: { id: string; x: number; facing: 1
     // Aura builds up just before the special.
     inp.charged = moves[step.current % moves.length] === 'special';
   });
-  return <Fighter emoji={c.emoji} accent={accentOf(c.id)} read={() => input.current} />;
+  return <Fighter emoji={c.emoji} auraColor={specialStyleOf(c.id).color} read={() => input.current} />;
 }
 
 function Rig() {

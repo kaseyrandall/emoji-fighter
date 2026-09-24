@@ -10,6 +10,7 @@ import Joystick from '../components/Joystick';
 import Credits from '../components/Credits';
 import { ArenaHud } from '../components/ArenaHud';
 import ArenaScene from '../three/ArenaScene';
+import { specialStyleOf } from '../three/specialStyles';
 
 export default function GameArena() {
   const navigate = useNavigate();
@@ -245,12 +246,12 @@ export default function GameArena() {
         onPause={pauseGame}
       />
 
-      {/* Brief purple wash when a special is cast. */}
+      {/* Brief wash in the fighter's special colour when they cast it. */}
       <AnimatePresence>
         {castFlash && gameStatus === 'playing' && (
           <motion.div
             className="fixed inset-0 pointer-events-none z-30"
-            style={{ background: 'radial-gradient(circle at 50% 60%, rgba(216,180,254,0.35), transparent 65%)' }}
+            style={{ background: `radial-gradient(circle at 50% 60%, ${specialStyleOf(selectedCharacter.id).color}66, transparent 65%)` }}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
