@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import ReactGA from 'react-ga4';
 import { AnimatePresence } from 'framer-motion';
-import { Swords, Info } from 'lucide-react';
+import { Swords, Info, History } from 'lucide-react';
 import Credits from '../components/Credits';
 import LandingScene from '../three/LandingScene';
 
@@ -18,7 +18,17 @@ export default function LandingPage() {
           fit a short landscape phone without scrolling. */}
       <main className="relative z-10 flex-1 min-h-0 flex flex-col items-center justify-center px-4 text-center">
         <Swords className="w-11 h-11 lg:w-16 lg:h-16 text-yellow-500 mb-3 lg:mb-5" />
-        <h1 className="text-4xl lg:text-6xl font-bold mb-1.5 lg:mb-3 drop-shadow-[0_4px_18px_rgba(0,0,0,0.9)]">Emoji Fighter</h1>
+        <h1 className="relative text-4xl lg:text-6xl font-bold mb-1.5 lg:mb-3 drop-shadow-[0_4px_18px_rgba(0,0,0,0.9)]">
+          Emoji Fighter
+          {/* "3D" badge, tucked against the end of the title */}
+          <span
+            className="absolute -top-3 -right-9 lg:-top-5 lg:-right-14 rotate-12 rounded-md px-1.5 py-0.5 lg:px-2 lg:py-1
+                     text-sm lg:text-2xl font-black text-black bg-gradient-to-br from-yellow-300 to-orange-500
+                     shadow-[0_0_18px_rgba(245,158,11,0.7)] border-2 border-black/60"
+          >
+            3D
+          </span>
+        </h1>
         <p className="text-sm lg:text-xl mb-5 lg:mb-8 text-gray-300">Battle with emoji warriors!</p>
         <div className="flex flex-col items-center gap-2 lg:gap-3">
           <button
@@ -36,14 +46,26 @@ export default function LandingPage() {
           >
             Play Now
           </button>
-          <button
-            onClick={() => setShowCredits(true)}
-            className="inline-flex items-center gap-1.5 px-4 py-1.5 text-gray-300 hover:text-white
-                     transition-colors text-sm font-semibold"
-          >
-            <Info size={16} />
-            Credits
-          </button>
+          <div className="flex items-center gap-1">
+            {/* The original 2D game, kept playable as a static build at /classic/ */}
+            <a
+              href="/classic/"
+              onClick={() => ReactGA.event({ category: 'Game', action: 'Open Classic', label: 'Landing Page' })}
+              className="inline-flex items-center gap-1.5 px-4 py-1.5 text-gray-300 hover:text-white
+                       transition-colors text-sm font-semibold"
+            >
+              <History size={16} />
+              Classic version
+            </a>
+            <button
+              onClick={() => setShowCredits(true)}
+              className="inline-flex items-center gap-1.5 px-4 py-1.5 text-gray-300 hover:text-white
+                       transition-colors text-sm font-semibold"
+            >
+              <Info size={16} />
+              Credits
+            </button>
+          </div>
         </div>
       </main>
 
