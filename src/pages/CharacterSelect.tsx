@@ -16,6 +16,9 @@ const overallOf = (c: Character) =>
   Math.round(((c.stats.power + c.stats.speed + c.stats.technique) / 3) * 10) / 10;
 const tierOf = (ovr: number) => (ovr >= 8.7 ? 'S' : ovr >= 8 ? 'A' : ovr >= 7.3 ? 'B' : 'C');
 
+// Fades the 3D preview out toward its edges (see the hero panel).
+const PREVIEW_MASK = 'radial-gradient(ellipse 50% 50% at 50% 50%, #000 62%, transparent 100%)';
+
 // Whether a CSS media query currently matches (updates live).
 function useMediaQuery(query: string) {
   const [matches, setMatches] = React.useState(() => window.matchMedia(query).matches);
@@ -76,21 +79,14 @@ export default function CharacterSelect() {
 
   // Roster: two rows that scroll together as one unit; tile size follows the
   // available height of the scroll area.
-  // Tablets / desktops (roomy landscape) get a different balance: the roster
-  // stacks into as many rows of bigger tiles as fit — usually showing every
-  // fighter at once — and the hero panel is wider. Phones keep two rows that
-  // scroll sideways and a slim hero column.
+  // The roster is a strip of tiles that scrolls sideways as one. Tablets /
+  // desktops (roomy landscape) get three rows of bigger tiles and a wider
+  // hero panel; phones keep two rows and a slim hero column.
   const roomy = useMediaQuery('(min-width: 900px) and (min-height: 600px)');
   const [rosterRef, rosterSize] = useElementSize<HTMLDivElement>();
   const GAP = roomy ? 10 : 8;
-  // Roomy: pick the grid shape (rows × columns) that shows the whole roster
-  // with the biggest tiles.
-  const fitTile = (r: number) => {
-    const c = Math.ceil(characters.length / r);
-    return Math.min((rosterSize.h - GAP * (r - 1)) / r, (rosterSize.w - GAP * (c - 1)) / c, 168);
-  };
-  const rows = roomy ? [2, 3, 4, 5].reduce((best, r) => (fitTile(r) > fitTile(best) ? r : best), 3) : 2;
-  const tile = Math.max(0, roomy ? fitTile(rows) : Math.min((rosterSize.h - GAP) / 2, 118));
+  const rows = roomy ? 3 : 2;
+  const tile = Math.max(0, Math.min((rosterSize.h - GAP * (rows - 1)) / rows, roomy ? 168 : 118));
 
   // Track scroll position so the edge fades only show when there's more to see.
   const [edges, setEdges] = React.useState({ left: false, right: false });
@@ -103,6 +99,9 @@ export default function CharacterSelect() {
     });
   }, [rosterRef]);
   React.useEffect(updateEdges, [updateEdges, tile, rosterSize.w]);
+  const rosterMask = `linear-gradient(to right, ${edges.left ? 'transparent 0, #000 40px' : '#000 0'}, ${
+    edges.right ? '#000 calc(100% - 64px), transparent 100%' : '#000 100%'
+  })`;
 
   const handleSelect = (id: string) => {
     setSelectedId(id);
@@ -192,18 +191,19 @@ export default function CharacterSelect() {
             ref={rosterRef}
             onScroll={updateEdges}
             className="h-full overflow-x-auto overflow-y-hidden no-scrollbar"
+            // Tiles fade out at an edge with more fighters beyond it. A mask
+            // (not a dark overlay) so the backdrop shows through seamlessly.
+            style={{ WebkitMaskImage: rosterMask, maskImage: rosterMask }}
           >
             {tile > 0 && (
               <div
                 style={{
                   display: 'grid',
-                  // Phones: a two-row strip filling column by column (scrolls
-                  // sideways). Roomy: a normal grid, read left to right.
-                  ...(roomy
-                    ? { gridTemplateColumns: `repeat(${Math.ceil(characters.length / rows)}, ${tile}px)`, gridAutoRows: `${tile}px` }
-                    : { gridTemplateRows: `repeat(${rows}, ${tile}px)`, gridAutoFlow: 'column' as const, gridAutoColumns: `${tile}px` }),
+                  gridTemplateRows: `repeat(${rows}, ${tile}px)`,
+                  gridAutoFlow: 'column',
+                  gridAutoColumns: `${tile}px`,
                   gap: GAP,
-                  justifyContent: roomy ? 'center' : 'start',
+                  justifyContent: 'start',
                   alignContent: 'center',
                   height: '100%',
                 }}
@@ -215,14 +215,9 @@ export default function CharacterSelect() {
             )}
           </div>
 
-          {/* left fade — appears once you've scrolled */}
+          {/* chevron — "more fighters this way" */}
           <div
-            className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-black/80 to-transparent transition-opacity duration-200"
-            style={{ opacity: edges.left ? 1 : 0 }}
-          />
-          {/* right fade + chevron — "more fighters this way" */}
-          <div
-            className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-black/85 to-transparent flex items-center justify-end pr-1 transition-opacity duration-200"
+            className="pointer-events-none absolute inset-y-0 right-0 w-12 flex items-center justify-end pr-1 transition-opacity duration-200"
             style={{ opacity: edges.right ? 1 : 0 }}
           >
             <motion.div animate={{ x: [0, 4, 0] }} transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}>
@@ -235,7 +230,9 @@ export default function CharacterSelect() {
             fighters in place; only the text block re-animates per pick. */}
         <div className={`${roomy ? 'w-[40%] max-w-[30rem] pl-2' : 'w-[32%] max-w-[16rem]'} shrink-0 flex flex-col min-h-0`}>
           <div className="relative flex-1 min-h-0 -mx-2">
-            <div className="absolute inset-0">
+            {/* Soft-edged: the preview (its glow and pedestal) fades out toward
+                every edge, so it blends into the backdrop with no visible box. */}
+            <div className="absolute inset-0" style={{ WebkitMaskImage: PREVIEW_MASK, maskImage: PREVIEW_MASK }}>
               <FighterPreview character={selected} />
             </div>
           </div>
