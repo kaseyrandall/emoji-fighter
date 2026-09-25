@@ -13,13 +13,11 @@ import ArenaScene from '../three/ArenaScene';
 import PauseMenu from '../components/PauseMenu';
 import { useSettings } from '../store/settingsStore';
 import { playStageMusic, stopMusic } from '../audio/music';
-import { enterFullscreen, exitFullscreen } from '../lib/fullscreen';
+import { enterFullscreen } from '../lib/fullscreen';
 import { specialStyleOf } from '../three/specialStyles';
 
 export default function GameArena() {
   const navigate = useNavigate();
-  // Fullscreen is for fights only: leaving the arena brings the browser bar back.
-  useEffect(() => () => exitFullscreen(), []);
   const winSound = useRef<UIFx>();
   const loseSound = useRef<UIFx>();
 

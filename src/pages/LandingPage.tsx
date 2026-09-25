@@ -4,6 +4,8 @@ import ReactGA from 'react-ga4';
 import { AnimatePresence } from 'framer-motion';
 import { Swords, Info, History } from 'lucide-react';
 import Credits from '../components/Credits';
+import { enterFullscreen, exitFullscreen } from '../lib/fullscreen';
+import { useSettings } from '../store/settingsStore';
 import LandingScene from '../three/LandingScene';
 
 // Secondary home-page buttons: same height as each other (48px), outlined so
@@ -15,6 +17,8 @@ const SECONDARY_BUTTON =
 
 export default function LandingPage() {
   const navigate = useNavigate();
+  // The home page is an ordinary web page: coming back here leaves full screen.
+  React.useEffect(() => exitFullscreen(), []);
   const [showCredits, setShowCredits] = React.useState(false);
 
   return (
@@ -51,6 +55,8 @@ export default function LandingPage() {
                 action: 'Start Game',
                 label: 'Landing Page'
               });
+              // Full screen from here through fighter select and the fights.
+              if (useSettings.getState().fullscreen) enterFullscreen();
               navigate('/select');
             }}
             className="h-14 lg:h-16 w-full bg-yellow-500 text-black rounded-xl text-lg lg:text-xl font-bold

@@ -1,4 +1,4 @@
-// Fullscreen for the fight: hides the browser's address bar and tabs.
+// Full screen from fighter select through the fights: hides the browser bar.
 // Supported by Android browsers, desktop browsers and iPad Safari; iPhone
 // Safari has no page fullscreen (there, "Add to Home Screen" launches the game
 // without the browser bar instead). Requests must come from a tap or click.

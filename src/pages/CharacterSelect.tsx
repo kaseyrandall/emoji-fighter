@@ -106,6 +106,9 @@ export default function CharacterSelect() {
 
   const handleSelect = (id: string) => {
     setSelectedId(id);
+    // Opened directly (or after swiping out of full screen): any tap here
+    // brings full screen back.
+    if (useSettings.getState().fullscreen) enterFullscreen();
     if (useSettings.getState().sfx) new Audio('/assets/select.wav').play().catch(() => {});
   };
 
