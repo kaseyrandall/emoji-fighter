@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Info, LogOut, Maximize, Music, Play, Volume2 } from 'lucide-react';
+import { Info, LogOut, Maximize, Music, Play, Swords, Volume2 } from 'lucide-react';
 import { Character } from '../types/game';
 import { useSettings } from '../store/settingsStore';
 import { enterFullscreen, exitFullscreen, fullscreenSupported, isFullscreen, onFullscreenChange } from '../lib/fullscreen';
@@ -46,6 +46,8 @@ export default function PauseMenu({ player, opponent, fight, totalFights, round,
   const [full, setFull] = React.useState(isFullscreen);
   React.useEffect(() => onFullscreenChange(() => setFull(isFullscreen())), []);
   const canFullscreen = fullscreenSupported();
+  // Quitting throws away the whole gauntlet run, so it takes a second tap.
+  const [confirmQuit, setConfirmQuit] = React.useState(false);
 
   // Everything is sized off the screen: the card takes a share of the width,
   // row heights a share of the height, and Resume is a square exactly as tall
@@ -68,9 +70,15 @@ export default function PauseMenu({ player, opponent, fight, totalFights, round,
       <div className="flex items-center justify-between gap-3 mb-4 lg:mb-6">
         <div>
           <h2 className="text-lg lg:text-2xl tracking-widest text-white">PAUSED</h2>
-          <p className="mt-1.5 text-[10px] lg:text-xs tracking-wider text-gray-400 uppercase">
-            Fight {fight}/{totalFights} · Round {round}
-          </p>
+          {confirmQuit ? (
+            <p className="mt-1.5 text-[10px] lg:text-xs tracking-wider text-red-300 uppercase">
+              Quit? This run's progress will be lost
+            </p>
+          ) : (
+            <p className="mt-1.5 text-[10px] lg:text-xs tracking-wider text-gray-400 uppercase">
+              Fight {fight}/{totalFights} · Round {round}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-1.5 text-2xl lg:text-4xl shrink-0" aria-label={`${player.name} vs ${opponent.name}`}>
           <span>{player.emoji}</span>
@@ -109,23 +117,47 @@ export default function PauseMenu({ player, opponent, fight, totalFights, round,
             )}
           </div>
 
+          {/* Quit / Credits, swapped in place for the quit confirmation */}
           <div style={{ height: 'var(--act)' }} className="grid grid-cols-2 gap-3">
-            <button
-              onClick={onQuit}
-              className="rounded-xl border border-red-400/40 bg-red-500/10 text-red-300 text-xs lg:text-sm font-semibold
-                         flex items-center justify-center gap-2 hover:bg-red-500/20 transition-colors active:scale-95"
-            >
-              <LogOut size={16} />
-              Quit
-            </button>
-            <button
-              onClick={onCredits}
-              className="rounded-xl border border-white/15 bg-white/5 text-gray-300 text-xs lg:text-sm font-semibold
-                         flex items-center justify-center gap-2 hover:bg-white/10 hover:text-white transition-colors active:scale-95"
-            >
-              <Info size={16} />
-              Credits
-            </button>
+            {confirmQuit ? (
+              <>
+                <button
+                  onClick={() => setConfirmQuit(false)}
+                  className="rounded-xl border border-white/15 bg-white/5 text-gray-200 text-xs lg:text-sm font-semibold
+                             flex items-center justify-center gap-2 hover:bg-white/10 hover:text-white transition-colors active:scale-95"
+                >
+                  <Swords size={16} />
+                  Keep fighting
+                </button>
+                <button
+                  onClick={onQuit}
+                  className="rounded-xl bg-red-600 text-white text-xs lg:text-sm font-bold
+                             flex items-center justify-center gap-2 hover:bg-red-500 transition-colors active:scale-95"
+                >
+                  <LogOut size={16} />
+                  Yes, quit
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => setConfirmQuit(true)}
+                  className="rounded-xl border border-red-400/40 bg-red-500/10 text-red-300 text-xs lg:text-sm font-semibold
+                             flex items-center justify-center gap-2 hover:bg-red-500/20 transition-colors active:scale-95"
+                >
+                  <LogOut size={16} />
+                  Quit
+                </button>
+                <button
+                  onClick={onCredits}
+                  className="rounded-xl border border-white/15 bg-white/5 text-gray-300 text-xs lg:text-sm font-semibold
+                             flex items-center justify-center gap-2 hover:bg-white/10 hover:text-white transition-colors active:scale-95"
+                >
+                  <Info size={16} />
+                  Credits
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
