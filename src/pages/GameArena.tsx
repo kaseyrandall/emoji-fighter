@@ -35,7 +35,6 @@ export default function GameArena() {
     opponentHealth,
     gameStatus,
     countdown,
-    currentMove,
     timer,
     round,
     roundLoser,
@@ -53,7 +52,6 @@ export default function GameArena() {
       opponentHealth: s.opponentHealth,
       gameStatus: s.gameStatus,
       countdown: s.countdown,
-      currentMove: s.currentMove,
       timer: s.timer,
       round: s.round,
       roundLoser: s.roundLoser,
@@ -85,14 +83,24 @@ export default function GameArena() {
   const [showCredits, setShowCredits] = useState(false);
   const bgmRef = useRef<HTMLAudioElement | null>(null);
 
-  // Brief purple wash when the player casts their super (the 3D scene handles
-  // the rings / sparks / camera punch-in).
+  // Brief wash in the fighter's special colour when they cast their super
+  // (the 3D scene handles the rings / sparks / camera punch-in). Keyed to the
+  // attack counter so every cast flashes once, and its switch-off timer lives
+  // in a ref: nothing else re-running this effect can cancel it (which used to
+  // leave the wash stuck on screen for the rest of the fight).
+  const playerAttackSeq = useGameStore((s) => s.playerAttackSeq);
+  const flashTimer = useRef<ReturnType<typeof setTimeout>>();
   useEffect(() => {
-    if (currentMove !== 'special') return;
+    if (useGameStore.getState().currentMove !== 'special') return;
     setCastFlash(true);
-    const t = setTimeout(() => setCastFlash(false), 220);
-    return () => clearTimeout(t);
-  }, [currentMove]);
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    flashTimer.current = setTimeout(() => setCastFlash(false), 220);
+  }, [playerAttackSeq]);
+  // Never carry a wash across a round change, pause or result screen.
+  useEffect(() => {
+    if (gameStatus !== 'playing') setCastFlash(false);
+  }, [gameStatus]);
+  useEffect(() => () => { if (flashTimer.current) clearTimeout(flashTimer.current); }, []);
 
   useEffect(() => {
     if (!selectedCharacter || !opponent) {

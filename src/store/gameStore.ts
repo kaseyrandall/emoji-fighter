@@ -285,6 +285,17 @@ function resolveOnOpponent(move: AttackMove, damage: number, knockback: number):
   return result;
 }
 
+// Clear the player's attack pose 600ms after it's thrown — but only if no
+// newer attack has started since. (An unconditional reset let a punch's timer
+// wipe out a special thrown just after it, mid-swing.)
+function endAttackLater(seq: number) {
+  setTimeout(() => {
+    if (useGameStore.getState().playerAttackSeq === seq) {
+      useGameStore.setState({ isAttacking: false, currentMove: null });
+    }
+  }, 600);
+}
+
 export const useGameStore = create<GameStore>((set) => ({
   selectedCharacter: null,
   opponent: null,
@@ -422,7 +433,7 @@ export const useGameStore = create<GameStore>((set) => ({
     playerCooldown = move === 'heavy' ? HEAVY_ATTACK_COOLDOWN : PLAYER_ATTACK_COOLDOWN;
 
     set({ isAttacking: true, currentMove: move, playerAttackSeq: state.playerAttackSeq + 1 });
-    setTimeout(() => set({ isAttacking: false, currentMove: null }), 600);
+    endAttackLater(useGameStore.getState().playerAttackSeq);
 
     // The hit is checked when the blow lands (after the heavy's wind-up),
     // against where both fighters are at that moment.
@@ -454,7 +465,7 @@ export const useGameStore = create<GameStore>((set) => ({
 
     // Spend the meter on activation.
     set({ isAttacking: true, currentMove: 'special', specialMeter: 0, playerAttackSeq: state.playerAttackSeq + 1 });
-    setTimeout(() => set({ isAttacking: false, currentMove: null }), 600);
+    endAttackLater(useGameStore.getState().playerAttackSeq);
 
     const distance = Math.abs(state.playerPosition - state.opponentPosition);
     if (distance > SPECIAL_RANGE) return;
