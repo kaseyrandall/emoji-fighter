@@ -26,9 +26,10 @@ interface Drop {
   scale: number;
 }
 
-const makeDrop = (y?: number): Drop => ({
+// `spread` is how wide (world units) the rain falls: narrower in portrait.
+const makeDrop = (y?: number, spread = 26): Drop => ({
   emoji: RAIN[Math.floor(Math.random() * RAIN.length)],
-  x: (Math.random() - 0.5) * 26,
+  x: (Math.random() - 0.5) * spread,
   y: y ?? TOP + Math.random() * 4,
   z: -12 + Math.random() * 10,
   speed: 1.2 + Math.random() * 2.4,
@@ -40,7 +41,7 @@ const makeDrop = (y?: number): Drop => ({
 
 // One falling, tumbling 3D emoji. It respawns at the top with a fresh glyph
 // (re-keyed by the parent) once it falls out of view.
-function RainDrop({ initial }: { initial: Drop }) {
+function RainDrop({ initial, spread, sizeScale = 1 }: { initial: Drop; spread: number; sizeScale?: number }) {
   const ref = React.useRef<THREE.Group>(null);
   const [drop, setDrop] = React.useState(initial);
   const d = React.useRef(drop);
@@ -55,13 +56,13 @@ function RainDrop({ initial }: { initial: Drop }) {
     g.rotation.y = Math.sin(t * 0.4 * d.current.spin.y) * 0.7;
     g.rotation.z += d.current.spin.z * dt;
     if (g.position.y < BOTTOM) {
-      const next = makeDrop();
+      const next = makeDrop(undefined, spread);
       g.position.set(next.x, next.y, next.z);
       setDrop(next);
     }
   });
   return (
-    <group ref={ref} position={[initial.x, initial.y, initial.z]} scale={drop.scale}>
+    <group ref={ref} position={[initial.x, initial.y, initial.z]} scale={drop.scale * sizeScale}>
       <EmojiBody emoji={drop.emoji} size={1.3} depth={0.22} layers={4} />
     </group>
   );
@@ -106,10 +107,20 @@ function Rig() {
 
 function Contents() {
   const quality = useQuality((q) => q.level);
+  // Portrait phones: the view is narrow and tall, so the rain falls in a
+  // narrower band and the sparring pair moves below the title and buttons,
+  // side by side, instead of flanking the title off-screen.
+  const portrait = useThree((s) => s.size.width < s.size.height * 0.9);
+  const spread = portrait ? 7 : 26;
   const drops = React.useMemo(
-    () => Array.from({ length: RAIN_COUNT }, () => makeDrop(BOTTOM + Math.random() * (TOP - BOTTOM))),
-    []
+    () => Array.from({ length: RAIN_COUNT }, () => makeDrop(BOTTOM + Math.random() * (TOP - BOTTOM), spread)),
+    [spread]
   );
+  const pairX = portrait ? 1.3 : 5.4;
+  const pairY = portrait ? -4.3 : -2.6;
+  const pairScale = portrait ? 0.55 : 1;
+  // Smaller falling emoji in the narrow portrait view.
+  const dropScale = portrait ? 0.6 : 1;
   // Two different random fighters face off either side of the title.
   const pair = React.useMemo(() => {
     const pool = [...characters].sort(() => Math.random() - 0.5);
@@ -128,11 +139,11 @@ function Contents() {
       </sprite>
       {/* Half the rain when the device needs lighter rendering. */}
       {drops.slice(0, quality >= 2 ? RAIN_COUNT / 2 : RAIN_COUNT).map((d, i) => (
-        <RainDrop key={i} initial={d} />
+        <RainDrop key={`${spread}-${i}`} initial={d} spread={spread} sizeScale={dropScale} />
       ))}
-      <group position={[0, -2.6, 0]}>
+      <group position={[0, pairY, 0]} scale={pairScale}>
         {/* A glowing pedestal under each fighter */}
-        {[-5.4, 5.4].map((x) => (
+        {[-pairX / pairScale, pairX / pairScale].map((x) => (
           <group key={x} position={[x, 0, 0]}>
             <mesh position={[0, -0.16, 0]}>
               <cylinderGeometry args={[1.4, 1.55, 0.3, 40]} />
@@ -144,10 +155,10 @@ function Contents() {
             </mesh>
           </group>
         ))}
-        <group position={[-5.4, 0, 0]}>
+        <group position={[-pairX / pairScale, 0, 0]}>
           <Showboater id={pair[0]} x={0} facing={1} delay={0} />
         </group>
-        <group position={[5.4, 0, 0]}>
+        <group position={[pairX / pairScale, 0, 0]}>
           <Showboater id={pair[1]} x={0} facing={-1} delay={0.7} />
         </group>
       </group>
