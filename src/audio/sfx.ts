@@ -260,6 +260,13 @@ const specials: Record<string, () => void> = {
     hiss({ filter: 'highpass', from: 1200, dur: 0.06, vol: 0.7, delay: 0.26 });
     tone({ type: 'sawtooth', from: 440, to: 460, dur: 0.35, vol: 0.12, delay: 0.32, lowpass: 2000 });
   },
+  // Claw-tastrophe: an angry hiss, a yowl, then a flurry of claw scratches.
+  cat: () => {
+    hiss({ filter: 'highpass', from: 3500, to: 2500, dur: 0.3, vol: 0.3, attack: 0.02 });
+    tone({ type: 'sawtooth', from: 520, to: 900, dur: 0.22, vol: 0.12, lowpass: 2500, vibrato: { rate: 12, depth: 40 }, delay: 0.1 });
+    tone({ type: 'sawtooth', from: 900, to: 480, dur: 0.3, vol: 0.12, lowpass: 2500, vibrato: { rate: 12, depth: 40 }, delay: 0.3 });
+    for (let i = 0; i < 4; i++) hiss({ from: 4000, to: 1200, q: 2.5, dur: 0.07, vol: 0.35, delay: 0.3 + i * 0.08 });
+  },
 };
 
 export function special(characterId: string | undefined) {

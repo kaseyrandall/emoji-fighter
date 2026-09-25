@@ -31,6 +31,7 @@ const STYLES: Record<string, SpecialStyle> = {
   chicken: { color: '#fde047', glyphs: ['🪶', '⭐'], mode: 'burst', gravity: -1 }, // Roundhouse Peck
   unicorn: { color: '#f0abfc', glyphs: ['🌈', '✨', '💖'], mode: 'stream' }, // Rainbow Ram
   clown: { color: '#f43f5e', glyphs: ['🎈', '🎉'], mode: 'burst', gravity: -3 }, // Balloon Bomb
+  cat: { color: '#fb923c', glyphs: ['🐾', '💢'], mode: 'burst', gravity: -1.5 }, // Claw-tastrophe
 };
 
 const DEFAULT: SpecialStyle = { color: '#d8b4fe', glyphs: ['✨'], mode: 'burst' };

@@ -270,5 +270,23 @@ export const characters: Character[] = [
       special: 18
     },
     specialName: 'Balloon Bomb'
+  },
+  {
+    id: 'cat',
+    name: 'Cattitude',
+    emoji: '😼',
+    health: 100,
+    description: 'Smug, quick and always lands on its feet.',
+    stats: {
+      power: 7,
+      speed: 10,
+      technique: 9
+    },
+    moves: {
+      punch: 7,
+      heavy: 8,
+      special: 19
+    },
+    specialName: 'Claw-tastrophe'
   }
 ];
