@@ -132,9 +132,9 @@ function CameraRig({ fx }: { fx: React.MutableRefObject<FxState> }) {
       const ko = koScreen(s.gameStatus);
       // On a KO the camera swings up over the loser and looks down at them
       // lying flat on the floor.
-      const focusX = ko ? THREE.MathUtils.lerp(mid, loserX, 0.7) : mid;
-      const koPush = ko ? 2.4 : 0;
-      const koRise = ko ? 3.2 : 0;
+      const focusX = ko ? THREE.MathUtils.lerp(mid, loserX, 0.55) : mid;
+      const koPush = ko ? 1.4 : 0;
+      const koRise = ko ? 1.6 : 0;
       // Rise with an airborne fighter so a jump never leaves the top of a
       // short landscape phone (or disappears behind the HUD).
       const air = Math.max(toWorldY(s.playerY), toWorldY(s.opponentY)) * 0.45;
@@ -143,10 +143,11 @@ function CameraRig({ fx }: { fx: React.MutableRefObject<FxState> }) {
       targetPos.set(focusX * 0.9, 2.5 + CAM_LIFT + air + koRise, dist - koPush);
       // Look a little below the fighters' centres so they sit high enough to
       // clear the on-screen touch controls.
-      targetLook.set(focusX * 0.95, ko ? 0.5 : 1.05 + CAM_LIFT + air, 0);
+      targetLook.set(focusX * 0.95, ko ? 0.8 : 1.05 + CAM_LIFT + air, 0);
     }
 
-    const k = 1 - Math.exp(-(s.gameStatus === 'intro' ? 2.5 : 5) * dt);
+    // Ease slower for the intro orbit and the KO move, snappier in play.
+    const k = 1 - Math.exp(-(s.gameStatus === 'intro' ? 2.5 : koScreen(s.gameStatus) ? 2.2 : 5) * dt);
     pos.current.lerp(targetPos, k);
     look.current.lerp(targetLook, k);
 

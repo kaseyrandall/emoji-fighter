@@ -428,9 +428,9 @@ function SubwayProps() {
           <meshStandardMaterial color="#3a3350" roughness={0.6} metalness={0.2} />
         </mesh>
       ))}
-      <NeonTube position={[-8.2, 4.6, -3.2]} color="#ff3fd0" length={3.6} />
-      <NeonTube position={[8.2, 4.6, -3.2]} color="#3fe8ff" length={3.6} />
-      <NeonTube position={[0, 5.6, -4.2]} color="#ffe14d" length={5} />
+      {/* Only upright tubes at the far edges: horizontal ones floated in the
+          view like stray UI bars (or glowed behind the HUD), and the painted
+          backdrop already carries the neon. */}
       <NeonTube position={[-12.2, 2.5, -2.5]} color="#3fe8ff" length={2.5} vertical />
       <NeonTube position={[12.2, 2.5, -2.5]} color="#ff3fd0" length={2.5} vertical />
       {/* Rails in the trackbed behind the platform */}

@@ -1,6 +1,6 @@
 import React from 'react';
 import * as THREE from 'three';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { AdaptiveQuality } from './AdaptiveQuality';
 import { initialDpr } from '../store/qualityStore';
 import { Character, AttackMove } from '../types/game';
@@ -79,6 +79,19 @@ function Showcase({ character }: { character: Character }) {
   );
 }
 
+// Frames the pedestal: on a tall, narrow panel (e.g. an iPad's hero column)
+// the camera steps back so the fighter and its gloves still fit the width.
+function PreviewCamera() {
+  const { camera, size } = useThree();
+  React.useEffect(() => {
+    const aspect = size.width / Math.max(1, size.height);
+    const back = Math.max(1, 0.72 / aspect);
+    camera.position.set(0, 1.9 * back, 6.6 * back);
+    camera.lookAt(0, 1.05, 0);
+  }, [camera, size.width, size.height]);
+  return null;
+}
+
 export default function FighterPreview({ character }: { character: Character }) {
   return (
     <Canvas
@@ -86,8 +99,8 @@ export default function FighterPreview({ character }: { character: Character }) 
       flat
       gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
       camera={{ fov: 32, near: 0.1, far: 40, position: [0, 1.9, 6.6] }}
-      onCreated={({ camera }) => camera.lookAt(0, 1.05, 0)}
     >
+      <PreviewCamera />
       <AdaptiveQuality />
       <Showcase key={character.id} character={character} />
     </Canvas>

@@ -18,6 +18,8 @@ interface EmojiBodyProps {
   layers?: number;
   // Colour of the side walls / outline.
   rimColor?: THREE.ColorRepresentation;
+  // Use this art instead of rasterising `emoji` (e.g. the drawn glove).
+  texture?: THREE.Texture;
   onMaterials?: (m: EmojiMaterials) => void;
 }
 
@@ -28,9 +30,9 @@ const plane = new THREE.PlaneGeometry(1, 1);
 // one reads mirrored, which is exactly how the fighter looks after turning
 // around); the inner slices are tinted dark and slightly oversized, so they
 // form the body's side walls and a cartoon outline from the front.
-export function EmojiBody({ emoji, size = 1, depth = 0.3, layers = 8, rimColor = '#1b1b24', onMaterials }: EmojiBodyProps) {
+export function EmojiBody({ emoji, size = 1, depth = 0.3, layers = 8, rimColor = '#1b1b24', texture, onMaterials }: EmojiBodyProps) {
   const materials = React.useMemo<EmojiMaterials>(() => {
-    const map = emojiTexture(emoji);
+    const map = texture ?? emojiTexture(emoji);
     const face = new THREE.MeshStandardMaterial({
       map,
       alphaTest: 0.5,
@@ -52,7 +54,7 @@ export function EmojiBody({ emoji, size = 1, depth = 0.3, layers = 8, rimColor =
       metalness: 0,
     });
     return { face, rim };
-  }, [emoji, rimColor]);
+  }, [emoji, rimColor, texture]);
 
   React.useEffect(() => {
     onMaterials?.(materials);

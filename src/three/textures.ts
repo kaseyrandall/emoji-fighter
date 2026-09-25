@@ -6,28 +6,176 @@ import * as THREE from 'three';
 const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla",sans-serif';
 const EMOJI_RES = 256;
 
-const emojiCache = new Map<string, THREE.CanvasTexture>();
+const emojiCache = new Map<string, { tex: THREE.CanvasTexture; facesRight: boolean }>();
 
-// An emoji rasterised onto a transparent square canvas. Used as the alpha-tested
-// "cookie cutter" that the fighters' layered bodies are stamped from.
-export function emojiTexture(emoji: string): THREE.CanvasTexture {
-  const cached = emojiCache.get(emoji);
-  if (cached) return cached;
+// Emoji art differs a lot between platforms (Apple on iPhone / iPad / Mac,
+// Google Noto on Android, Segoe on Windows): glyphs sit at different sizes
+// and heights in their box, and some animals face the other way. So every
+// emoji is measured after drawing and re-fitted: scaled to the same size,
+// centred, and standing on the bottom edge (a fighter's feet on the floor).
 
+// The opaque bounds of a canvas's pixels, or null if it's blank.
+function opaqueBounds(data: Uint8ClampedArray, w: number, h: number) {
+  let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (data[(y * w + x) * 4 + 3] > 24) {
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+      }
+    }
+  }
+  return x1 < 0 ? null : { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+}
+
+// Apple devices (iPhone, iPad, Mac — in any browser) draw emoji with Apple's
+// set; everything else here assumes Google's Noto-style art (Android, Chrome
+// OS), whose side-on animals all face left like the rig does. (iPadOS's
+// desktop-mode Safari reports itself as a Mac, which is still Apple art.)
+const APPLE_EMOJI = typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Macintosh|Mac OS X/.test(navigator.userAgent);
+
+// Side-on emoji that Apple draws facing right (checked against Apple's art):
+// these get mirrored on Apple devices so they face their opponent.
+const APPLE_FACES_RIGHT = new Set(['🦖', '🦄']);
+
+function buildEmoji(emoji: string) {
+  // Draw big on a scratch canvas, find the glyph's real bounds…
+  const scratch = document.createElement('canvas');
+  scratch.width = scratch.height = EMOJI_RES * 1.5;
+  const sctx = scratch.getContext('2d', { willReadFrequently: true })!;
+  sctx.textAlign = 'center';
+  sctx.textBaseline = 'middle';
+  sctx.font = `${Math.round(EMOJI_RES * 0.9)}px ${EMOJI_FONT}`;
+  sctx.fillText(emoji, scratch.width / 2, scratch.height / 2);
+  const box = opaqueBounds(sctx.getImageData(0, 0, scratch.width, scratch.height).data, scratch.width, scratch.height);
+
+  // …then fit it: 92% of the box on its longer side, centred horizontally,
+  // standing on the bottom edge.
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = EMOJI_RES;
   const ctx = canvas.getContext('2d')!;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.font = `${Math.round(EMOJI_RES * 0.8)}px ${EMOJI_FONT}`;
-  // Nudge down a touch: emoji glyphs sit high in their em box.
-  ctx.fillText(emoji, EMOJI_RES / 2, EMOJI_RES * 0.54);
+  if (box) {
+    const scale = (EMOJI_RES * 0.92) / Math.max(box.w, box.h);
+    const dw = box.w * scale;
+    const dh = box.h * scale;
+    ctx.drawImage(scratch, box.x, box.y, box.w, box.h, (EMOJI_RES - dw) / 2, EMOJI_RES * 0.98 - dh, dw, dh);
+  }
+  const facesRight = APPLE_EMOJI && APPLE_FACES_RIGHT.has(emoji);
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
-  emojiCache.set(emoji, tex);
-  return tex;
+  const entry = { tex, facesRight };
+  emojiCache.set(emoji, entry);
+  return entry;
+}
+
+// An emoji rasterised onto a transparent square canvas (normalised as above).
+// Used as the alpha-tested "cookie cutter" that the 3D bodies are stamped from.
+export function emojiTexture(emoji: string): THREE.CanvasTexture {
+  return (emojiCache.get(emoji) ?? buildEmoji(emoji)).tex;
+}
+
+// Whether this device draws the emoji looking to the right. Fighters face
+// left in their own art space, so a right-facing glyph gets mirrored.
+export function emojiFacesRight(emoji: string): boolean {
+  return (emojiCache.get(emoji) ?? buildEmoji(emoji)).facesRight;
+}
+
+// A rounded-rectangle path with per-corner radii [tl, tr, br, bl]. (The
+// built-in ctx.roundRect is missing on older Safari / iPadOS.)
+function roundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, [tl, tr, br, bl]: number[]) {
+  ctx.beginPath();
+  ctx.moveTo(x + tl, y);
+  ctx.lineTo(x + w - tr, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + tr);
+  ctx.lineTo(x + w, y + h - br);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - br, y + h);
+  ctx.lineTo(x + bl, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - bl);
+  ctx.lineTo(x, y + tl);
+  ctx.quadraticCurveTo(x, y, x + tl, y);
+  ctx.closePath();
+}
+
+let gloveTex: THREE.CanvasTexture | undefined;
+
+// A boxing glove drawn in the emoji style. Platforms draw 🥊 at very
+// different angles (Google upright, Apple lying on its side), so the gloves
+// use this instead: upright, knuckles at the top, thumb on the right (toward
+// the body in the rig), cuff at the bottom — identical on every device.
+export function gloveTexture(): THREE.CanvasTexture {
+  if (gloveTex) return gloveTex;
+  const R = EMOJI_RES;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = R;
+  const ctx = canvas.getContext('2d')!;
+  const outline = '#5c0710';
+  ctx.lineJoin = 'round';
+
+  const red = (x0: number, y0: number, x1: number, y1: number) => {
+    const g = ctx.createLinearGradient(x0, y0, x1, y1);
+    g.addColorStop(0, '#ff5a5f');
+    g.addColorStop(0.55, '#e0202b');
+    g.addColorStop(1, '#a90f1c');
+    return g;
+  };
+
+  // Cuff.
+  roundedRect(ctx, 78, 168, 104, 70, [14, 14, 14, 14]);
+  ctx.fillStyle = red(78, 168, 182, 238);
+  ctx.fill();
+  ctx.lineWidth = 8;
+  ctx.strokeStyle = outline;
+  ctx.stroke();
+  // Cuff band.
+  ctx.fillStyle = '#ffd23f';
+  roundedRect(ctx, 98, 192, 64, 20, [8, 8, 8, 8]);
+  ctx.fill();
+
+  // Thumb (right side), drawn before the fist so the fist overlaps its root.
+  ctx.beginPath();
+  ctx.ellipse(186, 118, 30, 46, 0.18, 0, Math.PI * 2);
+  ctx.fillStyle = red(160, 70, 216, 170);
+  ctx.fill();
+  ctx.lineWidth = 8;
+  ctx.stroke();
+
+  // Fist.
+  roundedRect(ctx, 52, 18, 148, 162, [70, 70, 34, 34]);
+  ctx.fillStyle = red(52, 18, 200, 180);
+  ctx.fill();
+  ctx.lineWidth = 8;
+  ctx.stroke();
+
+  // Knuckle crease and the seam where the thumb tucks in.
+  ctx.strokeStyle = 'rgba(92,7,16,0.55)';
+  ctx.lineWidth = 6;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(78, 70);
+  ctx.quadraticCurveTo(126, 58, 176, 72);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(182, 92);
+  ctx.quadraticCurveTo(172, 124, 184, 150);
+  ctx.stroke();
+
+  // Glossy highlight.
+  const hl = ctx.createRadialGradient(96, 56, 4, 96, 56, 46);
+  hl.addColorStop(0, 'rgba(255,255,255,0.75)');
+  hl.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = hl;
+  ctx.beginPath();
+  ctx.ellipse(96, 60, 40, 30, -0.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  gloveTex = new THREE.CanvasTexture(canvas);
+  gloveTex.colorSpace = THREE.SRGBColorSpace;
+  gloveTex.anisotropy = 4;
+  return gloveTex;
 }
 
 let glowTex: THREE.CanvasTexture | undefined;

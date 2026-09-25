@@ -4,7 +4,7 @@ import { useFrame } from '@react-three/fiber';
 import { AttackMove } from '../types/game';
 import { FighterInput } from './fighterInput';
 import { EmojiBody, EmojiMaterials } from './EmojiBody';
-import { glowTexture, shadowTexture } from './textures';
+import { emojiFacesRight, glowTexture, gloveTexture, shadowTexture } from './textures';
 
 interface FighterProps {
   emoji: string;
@@ -15,7 +15,9 @@ interface FighterProps {
   size?: number;
 }
 
-const BODY = 1.8; // glyph size in world units
+// Glyph size in world units. Emoji art is re-fitted to fill its texture (see
+// textures.ts), so this is the fighter's actual on-screen size.
+const BODY = 1.62;
 // The heavy's timing matches the store: its blow lands 0.3s in (p ≈ 0.48).
 const ATTACK_DUR: Record<AttackMove, number> = { punch: 0.3, heavy: 0.62, special: 0.65 };
 
@@ -50,11 +52,12 @@ const REAR_GLOVE = new THREE.Vector3(-0.55, 1.2, -0.4);
 const tmp = new THREE.Vector3();
 const pulseOf = (t: number) => Math.sin(t * 6);
 
-// Gloves are small emoji cutouts too. The 🥊 glyph is an upright glove with
-// its thumb on the right: unmirrored, that puts the thumb toward the body (the
-// rig faces -X). Rotating it +90° about Z points the knuckles forward with
-// the thumb on top, the way a punch looks from the side.
-const GLOVE = '🥊';
+// Gloves are cutouts too, from a glove drawn in the emoji style (the real 🥊
+// is drawn at a different angle on every platform). The art is upright with
+// its thumb on the right: that puts the thumb toward the body (the rig faces
+// -X). Rotating it +90° about Z points the knuckles forward with the thumb on
+// top, the way a punch looks from the side.
+const GLOVE = 'glove';
 const GLOVE_SIZE = 0.62;
 
 // A Rayman-style emoji brawler: a thick stamped emoji body with floating
@@ -343,15 +346,18 @@ export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 
         <group ref={yaw}>
           <group ref={body}>
             <group ref={spin} position={[0, BODY / 2 + 0.02, 0]}>
-              <EmojiBody emoji={emoji} size={BODY} depth={0.34} layers={10} onMaterials={(m) => (mats.current = m)} />
+              {/* The rig's art faces left; mirror glyphs this device draws facing right. */}
+              <group scale={[emojiFacesRight(emoji) ? -1 : 1, 1, 1]}>
+                <EmojiBody emoji={emoji} size={BODY} depth={0.34} layers={10} onMaterials={(m) => (mats.current = m)} />
+              </group>
             </group>
           </group>
           {/* The rear glove sits behind the body, the lead glove in front. */}
           <group ref={rearGlove}>
-            <EmojiBody emoji={GLOVE} size={GLOVE_SIZE} depth={0.16} layers={4} onMaterials={(m) => (gloveMats.current[1] = m)} />
+            <EmojiBody emoji={GLOVE} texture={gloveTexture()} size={GLOVE_SIZE} depth={0.16} layers={4} onMaterials={(m) => (gloveMats.current[1] = m)} />
           </group>
           <group ref={leadGlove}>
-            <EmojiBody emoji={GLOVE} size={GLOVE_SIZE} depth={0.16} layers={4} onMaterials={(m) => (gloveMats.current[0] = m)} />
+            <EmojiBody emoji={GLOVE} texture={gloveTexture()} size={GLOVE_SIZE} depth={0.16} layers={4} onMaterials={(m) => (gloveMats.current[0] = m)} />
           </group>
         </group>
       </group>

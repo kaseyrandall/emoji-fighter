@@ -3,10 +3,26 @@
 @tailwind utilities;
 
 @layer base {
+  /* The game is a single full-screen view: lock the page itself so it can
+     never scroll or rubber-band (iPad Safari / Chrome would bounce the whole
+     page when a drag reached it, or when anything overhung the screen edge).
+     Areas meant to scroll (the fighter roster, credits) scroll inside their
+     own containers. */
   html,
   body,
   #root {
     height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+  body {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+  }
+  /* Drags on a 3D scene belong to the game, never to page panning / zoom. */
+  canvas {
+    touch-action: none;
   }
   body {
     @apply antialiased font-arcade;
