@@ -367,7 +367,7 @@ function playDrum(c: AudioContext, out: AudioNode, noise: AudioBuffer, kind: Dru
 
 // --- Sequencer ------------------------------------------------------------------
 
-const MUSIC_VOL = 0.34;
+const MUSIC_VOL = 0.22;
 const LOOKAHEAD = 0.12; // seconds of notes scheduled ahead of the clock
 
 let current: string | null = null; // stage id whose theme is playing
