@@ -172,6 +172,8 @@ const aiBlockChance = (stage: number) => Math.max(0, Math.min(0.45, 0.08 + stage
 let oppGuardTimeout: ReturnType<typeof setTimeout> | undefined;
 const AI_SWING_MS = 280; // the AI can't guard this soon after throwing an attack
 // How often the AI answers a jumping player with the anti-air uppercut.
+// Once its meter is full, the odds the AI cashes it in on a given attack.
+const aiSpecialChance = (stage: number) => Math.max(0.35, Math.min(0.85, 0.35 + stage * 0.1));
 const aiAntiAirChance = (stage: number) => Math.max(0.2, Math.min(0.75, 0.3 + stage * 0.09));
 
 // The opponent's jump arc, and how many 16ms ticks it spends in the air.
@@ -205,6 +207,7 @@ const freshBout = () => ({
   moveDir: 0,
   playerVel: 0,
   specialMeter: 0,
+  opponentSpecialMeter: 0,
   opponentMove: null,
   opponentBlocking: false,
 });
@@ -220,6 +223,8 @@ interface GameStore extends GameState {
   playerVel: number;
   setMoveDir: (dir: number) => void;
   specialMeter: number;
+  // The AI's super meter: charged and spent exactly like the player's.
+  opponentSpecialMeter: number;
   performMove: (move: Move) => void;
   performSpecial: () => void;
   endRound: (winner: 'player' | 'opponent') => void;
@@ -310,6 +315,7 @@ export const useGameStore = create<GameStore>((set) => ({
   moveDir: 0,
   playerVel: 0,
   specialMeter: 0,
+  opponentSpecialMeter: 0,
   opponentMove: null,
   opponentBlocking: false,
   playerAttackSeq: 0,
@@ -461,45 +467,60 @@ export const useGameStore = create<GameStore>((set) => ({
     const state = useGameStore.getState();
     if (state.gameStatus !== 'playing') return;
 
-    const moves: AttackMove[] = ['punch', 'heavy', 'special'];
     // Against a jumping player, the AI reaches for the anti-air uppercut —
-    // rarely early in the gauntlet, most of the time near the end.
+    // rarely early in the gauntlet, most of the time near the end. Like the
+    // player, it can only throw its special once its super meter is full.
     const stage = state.gauntletStage + DIFF_OFFSET[state.difficulty];
+    const charged = state.opponentSpecialMeter >= SPECIAL_METER_MAX;
     const randomMove: AttackMove = state.playerY > DODGE_HEIGHT && Math.random() < aiAntiAirChance(stage)
       ? 'heavy'
-      : moves[Math.floor(Math.random() * moves.length)];
+      : charged && Math.random() < aiSpecialChance(stage)
+      ? 'special'
+      : Math.random() < 0.6 ? 'punch' : 'heavy';
 
-    set({ isOpponentAttacking: true, opponentMove: randomMove, opponentAttackSeq: state.opponentAttackSeq + 1 });
+    set({
+      isOpponentAttacking: true,
+      opponentMove: randomMove,
+      opponentAttackSeq: state.opponentAttackSeq + 1,
+      // The special spends the whole meter as it's thrown, hit or miss.
+      ...(randomMove === 'special' ? { opponentSpecialMeter: 0 } : {}),
+    });
     setTimeout(() => set({ isOpponentAttacking: false }), 600);
 
     // Resolved when the blow lands (after the heavy's wind-up), against
     // where both fighters are at that moment.
     afterStartup(randomMove, () => {
       const state = useGameStore.getState();
+      const special = randomMove === 'special';
       const distance = Math.abs(state.playerPosition - state.opponentPosition);
-      if (distance > HIT_RANGE) return; // No damage if too far apart
+      if (distance > (special ? SPECIAL_RANGE : HIT_RANGE)) return; // No damage if too far apart
 
       if (!reaches(randomMove, state.opponentY, state.playerY)) {
         set({ hitEvent: { target: 'player', amount: 0, move: randomMove, seq: nextHit(), result: 'dodged' } });
         return;
       }
 
+      // The same super as the player's: a full-meter special hits harder.
       const { damageMult } = difficultyForStage(state.gauntletStage + DIFF_OFFSET[state.difficulty]);
-      const baseDamage = Math.round((state.opponent?.moves[randomMove] || 0) * damageMult);
+      const baseDamage = Math.round((state.opponent?.moves[randomMove] || 0) * damageMult * (special ? SPECIAL_SUPER_MULT : 1));
       const blocked = isPlayerBlocking(state);
       const damage = blocked ? chip(randomMove, baseDamage) : baseDamage;
       const hitEvent: HitEvent = { target: 'player', amount: damage, move: randomMove, seq: nextHit(), result: blocked ? 'blocked' : 'hit' };
 
       // Knock the player back (just a nudge when guarded).
-      const knockback = blocked ? BLOCK_KNOCKBACK : randomMove === 'special' ? 8 : 4;
+      const knockback = blocked ? BLOCK_KNOCKBACK : special ? 14 : 4;
       const knockedPosition = knockAway(state.playerPosition, state.opponentPosition, knockback);
       const newPlayerHealth = Math.max(0, state.playerHealth - damage);
+      // Landing a punch charges the AI's meter, half as much when blocked,
+      // exactly as for the player (a special charges nothing).
+      const gain = special ? 0 : blocked ? SPECIAL_GAIN / 2 : SPECIAL_GAIN;
+      const opponentSpecialMeter = Math.min(SPECIAL_METER_MAX, state.opponentSpecialMeter + gain);
 
       if (newPlayerHealth <= 0) {
-        set({ playerHealth: 0, playerPosition: knockedPosition, hitEvent });
+        set({ playerHealth: 0, playerPosition: knockedPosition, hitEvent, opponentSpecialMeter });
         useGameStore.getState().endRound('opponent');
       } else {
-        set({ playerHealth: newPlayerHealth, playerPosition: knockedPosition, hitEvent });
+        set({ playerHealth: newPlayerHealth, playerPosition: knockedPosition, hitEvent, opponentSpecialMeter });
       }
     });
   },
@@ -783,7 +804,8 @@ export const useGameStore = create<GameStore>((set) => ({
         playerFacing: 'right' as const,
         moveDir: 0,
         playerVel: 0,
-        specialMeter: 0
+        specialMeter: 0,
+        opponentSpecialMeter: 0
       };
 
       if (boutOver) {
@@ -802,7 +824,8 @@ export const useGameStore = create<GameStore>((set) => ({
           currentMove: null,
           moveDir: 0,
           playerVel: 0,
-          specialMeter: 0
+          specialMeter: 0,
+          opponentSpecialMeter: 0
         });
       } else {
         set({
@@ -847,6 +870,7 @@ export const useGameStore = create<GameStore>((set) => ({
       moveDir: 0,
       playerVel: 0,
       specialMeter: 0,
+      opponentSpecialMeter: 0,
       opponentBlocking: false
     });
   },

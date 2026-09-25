@@ -84,7 +84,7 @@ function readOpponent(out: FighterInput, lastX: { v: number }): FighterInput {
     : (s.gameStatus === 'roundEnd' && s.roundLoser === 'player') || s.gameStatus === 'lost'
     ? 'win'
     : 'fight';
-  out.charged = false;
+  out.charged = s.opponentSpecialMeter >= 100 && s.gameStatus === 'playing';
   out.guard = s.opponentBlocking && s.gameStatus === 'playing';
   return out;
 }

@@ -44,6 +44,7 @@ export default function GameArena() {
     gauntletStage,
     gauntletOpponents,
     specialMeter,
+    opponentSpecialMeter,
   } = useGameStore(
     useShallow((s) => ({
       selectedCharacter: s.selectedCharacter,
@@ -61,6 +62,7 @@ export default function GameArena() {
       gauntletStage: s.gauntletStage,
       gauntletOpponents: s.gauntletOpponents,
       specialMeter: s.specialMeter,
+      opponentSpecialMeter: s.opponentSpecialMeter,
     }))
   );
   // Actions are stable references.
@@ -246,6 +248,7 @@ export default function GameArena() {
         playerWins={playerWins}
         opponentWins={opponentWins}
         specialMeter={specialMeter}
+        opponentSpecialMeter={opponentSpecialMeter}
         timer={timer}
         round={round}
         gauntletStage={gauntletStage}

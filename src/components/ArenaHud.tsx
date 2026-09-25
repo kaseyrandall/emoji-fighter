@@ -10,6 +10,7 @@ interface ArenaHudProps {
   playerWins: number;
   opponentWins: number;
   specialMeter: number;
+  opponentSpecialMeter: number;
   timer: number;
   round: number;
   gauntletStage: number;
@@ -48,6 +49,24 @@ function HealthBar({ value, anchor }: { value: number; anchor: 'left' | 'right' 
   );
 }
 
+// Super meter under a health bar, filling from the fighter's own corner
+// (`anchor`); it glows once full and the special is ready.
+function SuperMeter({ value, anchor }: { value: number; anchor: 'left' | 'right' }) {
+  const ready = value >= 100;
+  return (
+    <div className={`mt-1 h-1.5 bg-gray-800/70 rounded-full overflow-hidden flex ${anchor === 'right' ? 'justify-end' : 'justify-start'}`}>
+      <div
+        className="h-full transition-all duration-200"
+        style={{
+          width: `${value}%`,
+          background: ready ? '#e9d5ff' : `linear-gradient(${anchor === 'right' ? '270deg' : '90deg'},#7c3aed,#c084fc)`,
+          boxShadow: ready ? '0 0 8px rgba(216,180,254,0.9)' : undefined,
+        }}
+      />
+    </div>
+  );
+}
+
 // Top HUD — corner portraits, full-width health bars meeting a central
 // round/timer badge (MK-style). Memoized so the ~30 HUD nodes aren't
 // reconciled on every 60fps movement frame; it only re-renders when one of
@@ -60,6 +79,7 @@ function ArenaHudBase({
   playerWins,
   opponentWins,
   specialMeter,
+  opponentSpecialMeter,
   timer,
   round,
   gauntletStage,
@@ -68,6 +88,7 @@ function ArenaHudBase({
   onPause,
 }: ArenaHudProps) {
   const specialReady = specialMeter >= 100;
+  const opponentReady = opponentSpecialMeter >= 100;
 
   return (
     <div className="hud-text relative w-full max-w-5xl mx-auto flex items-start gap-1.5 sm:gap-3 px-2 sm:px-3 pt-2 z-10">
@@ -90,17 +111,7 @@ function ArenaHudBase({
           </div>
         </div>
         <HealthBar value={playerHealth} anchor="right" />
-        {/* super meter (charged by landing attacks) */}
-        <div className="mt-1 h-1.5 bg-gray-800/70 rounded-full overflow-hidden">
-          <div
-            className="h-full transition-all duration-200"
-            style={{
-              width: `${specialMeter}%`,
-              background: specialReady ? '#e9d5ff' : 'linear-gradient(90deg,#7c3aed,#c084fc)',
-              boxShadow: specialReady ? '0 0 8px rgba(216,180,254,0.9)' : undefined,
-            }}
-          />
-        </div>
+        <SuperMeter value={specialMeter} anchor="left" />
       </div>
 
       {/* Central round / timer badge */}
@@ -134,10 +145,14 @@ function ArenaHudBase({
           <span className="truncate text-[10px] sm:text-xs font-semibold text-right ml-auto">{opponent.name}</span>
         </div>
         <HealthBar value={opponentHealth} anchor="left" />
+        <SuperMeter value={opponentSpecialMeter} anchor="right" />
       </div>
 
       {/* Opponent portrait */}
-      <div className="shrink-0 w-11 h-11 sm:w-14 sm:h-14 rounded-lg flex items-center justify-center text-2xl sm:text-4xl bg-gray-900/60 backdrop-blur-sm border-2 border-red-500/70">
+      <div
+        className="shrink-0 w-11 h-11 sm:w-14 sm:h-14 rounded-lg flex items-center justify-center text-2xl sm:text-4xl bg-gray-900/60 backdrop-blur-sm transition-colors"
+        style={{ border: `2px solid ${opponentReady ? '#d8b4fe' : 'rgba(239,68,68,0.7)'}` }}
+      >
         {opponent.emoji}
       </div>
     </div>
