@@ -16,7 +16,8 @@ interface FighterProps {
 }
 
 const BODY = 1.8; // glyph size in world units
-const ATTACK_DUR: Record<AttackMove, number> = { punch: 0.3, heavy: 0.42, special: 0.65 };
+// The heavy's timing matches the store: its blow lands 0.3s in (p ≈ 0.48).
+const ATTACK_DUR: Record<AttackMove, number> = { punch: 0.3, heavy: 0.62, special: 0.65 };
 
 const circle = new THREE.PlaneGeometry(1, 1);
 
@@ -36,8 +37,10 @@ const REAR_GLOVE = new THREE.Vector3(-0.55, 1.2, -0.4);
 const tmp = new THREE.Vector3();
 const pulseOf = (t: number) => Math.sin(t * 6);
 
-// Gloves are small emoji cutouts too. The 🥊 glyph punches toward screen-right,
-// so it's mirrored to point along the rig's forward (-X) axis.
+// Gloves are small emoji cutouts too. The 🥊 glyph is an upright glove with
+// its thumb on the right: unmirrored, that puts the thumb toward the body (the
+// rig faces -X). Rotating it +90° about Z points the knuckles forward with
+// the thumb on top, the way a punch looks from the side.
 const GLOVE = '🥊';
 const GLOVE_SIZE = 0.62;
 
@@ -137,6 +140,10 @@ export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 
     rg.y += Math.sin(a.t * 7 + 2.2) * 0.06;
     let gloveScale = 1;
     let rearScale = 1;
+    // Glove roll (about Z): a slight forward tilt in the guard, knuckles
+    // forward (π/2) at full extension.
+    let leadRot = 0.2;
+    let rearRot = 0.2;
 
     // Running: a bouncy hop in step with the stride.
     if (!airborne && Math.abs(inp.vel) > 0.4 && inp.pose === 'fight') {
@@ -156,6 +163,8 @@ export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 
     if (a.guard > 0.01) {
       lg.lerp(new THREE.Vector3(-0.8, 1.45, 0.6), a.guard);
       rg.lerp(new THREE.Vector3(-0.65, 1.05, 0.55), a.guard);
+      leadRot *= 1 - a.guard; // gloves stand upright to shield the face
+      rearRot *= 1 - a.guard;
       bodyRotZ -= 0.12 * a.guard;
       bodyX += 0.08 * a.guard;
     }
@@ -168,21 +177,28 @@ export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 
       if (a.attack.move === 'punch') {
         const e = strike(p, 0.3);
         lg.lerp(new THREE.Vector3(-1.9, 1.05, 0.25), e);
+        leadRot = THREE.MathUtils.lerp(leadRot, Math.PI / 2, e);
         bodyRotZ += 0.2 * e;
         bodyX -= 0.22 * e;
         gloveScale = 1 + 0.25 * e;
       } else if (a.attack.move === 'heavy') {
-        // Uppercut with the rear glove: dip and draw back, then swing it up
-        // and through in front of the body.
-        const windup = Math.sin(clamp01(p / 0.3) * Math.PI * 0.5) * (1 - clamp01((p - 0.3) / 0.15));
-        const e = strike(clamp01((p - 0.25) / 0.75), 0.3);
-        rg.lerp(new THREE.Vector3(0.1, 0.45, 0.2), windup);
+        // Uppercut with the rear glove, deliberately slow: a long dip-and-
+        // draw-back wind-up, the swing up and through (landing at p ≈ 0.48),
+        // a beat held at the top, then a heavy recovery.
+        const windup = easeOut(clamp01(p / 0.38)) * (1 - clamp01((p - 0.38) / 0.1));
+        const e = p < 0.36 ? 0
+          : p < 0.5 ? easeOut((p - 0.36) / 0.14)
+          : p < 0.62 ? 1
+          : 1 - easeIn((p - 0.62) / 0.38);
+        rg.lerp(new THREE.Vector3(0.25, 0.4, 0.2), windup);
         rg.lerp(new THREE.Vector3(-1.7, 1.85, 0.45), e);
+        rearRot = THREE.MathUtils.lerp(-0.35, 0.2, 1 - windup) + 0.6 * e;
         lg.lerp(new THREE.Vector3(-0.7, 1.35, 0.5), Math.max(windup, e));
-        bodyY += -0.1 * windup + 0.16 * e;
-        bodyRotZ += -0.12 * windup + 0.28 * e;
-        bodyX -= 0.25 * e;
-        rearScale = 1 + 0.45 * e;
+        leadRot = THREE.MathUtils.lerp(leadRot, 0, Math.max(windup, e));
+        bodyY += -0.14 * windup + 0.18 * e;
+        bodyRotZ += -0.18 * windup + 0.3 * e;
+        bodyX += 0.12 * windup - 0.28 * e;
+        rearScale = 1 + 0.5 * e;
       } else {
         // Special: wind up, spin, then both gloves thrust out.
         const windup = clamp01(p / 0.25);
@@ -191,6 +207,8 @@ export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 
         bodyScaleY = 1 + 0.18 * Math.sin(Math.min(1, p / 0.6) * Math.PI);
         lg.lerp(new THREE.Vector3(-2.1, 1.1, 0.3), thrust);
         rg.lerp(new THREE.Vector3(-2.0, 0.9, -0.2), thrust);
+        leadRot = THREE.MathUtils.lerp(leadRot, Math.PI / 2, thrust);
+        rearRot = THREE.MathUtils.lerp(rearRot, Math.PI / 2, thrust);
         bodyX += 0.2 * windup - 0.4 * thrust;
         gloveScale = 1 + 0.4 * thrust;
       }
@@ -241,6 +259,8 @@ export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 
     rearGlove.current!.position.copy(rg);
     leadGlove.current!.scale.setScalar(gloveScale);
     rearGlove.current!.scale.setScalar(0.9 * gloveScale * rearScale);
+    leadGlove.current!.rotation.z = leadRot;
+    rearGlove.current!.rotation.z = rearRot;
 
     // Contact shadow shrinks and fades as the fighter rises.
     const h = a.y;
@@ -290,14 +310,10 @@ export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 
           </group>
           {/* The rear glove sits behind the body, the lead glove in front. */}
           <group ref={rearGlove}>
-            <group scale={[-1, 1, 1]}>
-              <EmojiBody emoji={GLOVE} size={GLOVE_SIZE} depth={0.16} layers={4} onMaterials={(m) => (gloveMats.current[1] = m)} />
-            </group>
+            <EmojiBody emoji={GLOVE} size={GLOVE_SIZE} depth={0.16} layers={4} onMaterials={(m) => (gloveMats.current[1] = m)} />
           </group>
           <group ref={leadGlove}>
-            <group scale={[-1, 1, 1]}>
-              <EmojiBody emoji={GLOVE} size={GLOVE_SIZE} depth={0.16} layers={4} onMaterials={(m) => (gloveMats.current[0] = m)} />
-            </group>
+            <EmojiBody emoji={GLOVE} size={GLOVE_SIZE} depth={0.16} layers={4} onMaterials={(m) => (gloveMats.current[0] = m)} />
           </group>
         </group>
       </group>

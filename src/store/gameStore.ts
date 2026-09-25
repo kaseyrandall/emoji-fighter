@@ -52,14 +52,28 @@ const clearRoundLoops = () => {
   if (oppJumpLoop) { clearInterval(oppJumpLoop); oppJumpLoop = undefined; }
   oppCross = undefined;
   if (oppGuardTimeout) { clearTimeout(oppGuardTimeout); oppGuardTimeout = undefined; }
+  pendingHits.forEach(clearTimeout);
+  pendingHits.clear();
   if (roundEndTimeout) { clearTimeout(roundEndTimeout); roundEndTimeout = undefined; }
 };
 
 // Recovery between the player's own attacks, so mashing can't stack hits and
 // combat has a rhythm instead of a one-sided slam.
 const PLAYER_ATTACK_COOLDOWN = 340;
-// The heavy punch hits harder but leaves you open for longer.
-const HEAVY_ATTACK_COOLDOWN = 520;
+// The heavy punch is slow: a wind-up before it lands (matching the 3D
+// uppercut's impact frame) and a long recovery that leaves you open.
+const HEAVY_ATTACK_COOLDOWN = 700;
+const HEAVY_STARTUP_MS = 300;
+// Delayed hits (the heavy's wind-up) in flight; cancelled when a round ends.
+const pendingHits = new Set<ReturnType<typeof setTimeout>>();
+const afterStartup = (move: AttackMove, land: () => void) => {
+  if (move !== 'heavy') return land();
+  const t = setTimeout(() => {
+    pendingHits.delete(t);
+    if (useGameStore.getState().gameStatus === 'playing') land();
+  }, HEAVY_STARTUP_MS);
+  pendingHits.add(t);
+};
 let playerLastAttackAt = 0;
 let playerCooldown = PLAYER_ATTACK_COOLDOWN; // recovery owed by the last attack
 
@@ -367,6 +381,8 @@ export const useGameStore = create<GameStore>((set) => ({
       let h = 0;
       let dir = 1;
       playerJumpLoop = setInterval(() => {
+        // Paused: hold still, keeping the loop alive until resumed.
+        if (useGameStore.getState().gameStatus === 'paused') return;
         if (useGameStore.getState().gameStatus !== 'playing') {
           if (playerJumpLoop) { clearInterval(playerJumpLoop); playerJumpLoop = undefined; }
           return;
@@ -393,17 +409,20 @@ export const useGameStore = create<GameStore>((set) => ({
     set({ isAttacking: true, currentMove: move, playerAttackSeq: state.playerAttackSeq + 1 });
     setTimeout(() => set({ isAttacking: false, currentMove: null }), 600);
 
-    // Check if characters are close enough for hit detection
-
-    const distance = Math.abs(state.playerPosition - state.opponentPosition);
-    if (distance > HIT_RANGE) return; // No damage if too far apart
-
+    // The hit is checked when the blow lands (after the heavy's wind-up),
+    // against where both fighters are at that moment.
     const attack = move as AttackMove;
-    const base = state.selectedCharacter?.moves[attack] || 0;
-    // Landing an attack charges the super meter (half as much when blocked).
-    const gain = (r: HitResult) => (r === 'hit' ? SPECIAL_GAIN : r === 'blocked' ? SPECIAL_GAIN / 2 : 0);
-    const result = resolveOnOpponent(attack, base, 4);
-    if (result) set({ specialMeter: Math.min(SPECIAL_METER_MAX, useGameStore.getState().specialMeter + gain(result)) });
+    afterStartup(attack, () => {
+      const now = useGameStore.getState();
+      const distance = Math.abs(now.playerPosition - now.opponentPosition);
+      if (distance > HIT_RANGE) return; // No damage if too far apart
+
+      const base = now.selectedCharacter?.moves[attack] || 0;
+      // Landing an attack charges the super meter (half as much when blocked).
+      const gain = (r: HitResult) => (r === 'hit' ? SPECIAL_GAIN : r === 'blocked' ? SPECIAL_GAIN / 2 : 0);
+      const result = resolveOnOpponent(attack, base, 4);
+      set({ specialMeter: Math.min(SPECIAL_METER_MAX, useGameStore.getState().specialMeter + gain(result)) });
+    });
   },
 
   // The special is a super: usable only when the meter is full (charged by
@@ -444,32 +463,36 @@ export const useGameStore = create<GameStore>((set) => ({
     set({ isOpponentAttacking: true, opponentMove: randomMove, opponentAttackSeq: state.opponentAttackSeq + 1 });
     setTimeout(() => set({ isOpponentAttacking: false }), 600);
 
-    // Check if characters are close enough for hit detection
-    const distance = Math.abs(state.playerPosition - state.opponentPosition);
-    if (distance > HIT_RANGE) return; // No damage if too far apart
+    // Resolved when the blow lands (after the heavy's wind-up), against
+    // where both fighters are at that moment.
+    afterStartup(randomMove, () => {
+      const state = useGameStore.getState();
+      const distance = Math.abs(state.playerPosition - state.opponentPosition);
+      if (distance > HIT_RANGE) return; // No damage if too far apart
 
-    if (!reaches(randomMove, state.opponentY, state.playerY)) {
-      set({ hitEvent: { target: 'player', amount: 0, move: randomMove, seq: nextHit(), result: 'dodged' } });
-      return;
-    }
+      if (!reaches(randomMove, state.opponentY, state.playerY)) {
+        set({ hitEvent: { target: 'player', amount: 0, move: randomMove, seq: nextHit(), result: 'dodged' } });
+        return;
+      }
 
-    const { damageMult } = difficultyForStage(state.gauntletStage + DIFF_OFFSET[state.difficulty]);
-    const baseDamage = Math.round((state.opponent?.moves[randomMove] || 0) * damageMult);
-    const blocked = isPlayerBlocking(state);
-    const damage = blocked ? chip(randomMove, baseDamage) : baseDamage;
-    const hitEvent: HitEvent = { target: 'player', amount: damage, move: randomMove, seq: nextHit(), result: blocked ? 'blocked' : 'hit' };
+      const { damageMult } = difficultyForStage(state.gauntletStage + DIFF_OFFSET[state.difficulty]);
+      const baseDamage = Math.round((state.opponent?.moves[randomMove] || 0) * damageMult);
+      const blocked = isPlayerBlocking(state);
+      const damage = blocked ? chip(randomMove, baseDamage) : baseDamage;
+      const hitEvent: HitEvent = { target: 'player', amount: damage, move: randomMove, seq: nextHit(), result: blocked ? 'blocked' : 'hit' };
 
-    // Knock the player back (just a nudge when guarded).
-    const knockback = blocked ? BLOCK_KNOCKBACK : randomMove === 'special' ? 8 : 4;
-    const knockedPosition = knockAway(state.playerPosition, state.opponentPosition, knockback);
-    const newPlayerHealth = Math.max(0, state.playerHealth - damage);
+      // Knock the player back (just a nudge when guarded).
+      const knockback = blocked ? BLOCK_KNOCKBACK : randomMove === 'special' ? 8 : 4;
+      const knockedPosition = knockAway(state.playerPosition, state.opponentPosition, knockback);
+      const newPlayerHealth = Math.max(0, state.playerHealth - damage);
 
-    if (newPlayerHealth <= 0) {
-      set({ playerHealth: 0, playerPosition: knockedPosition, hitEvent });
-      useGameStore.getState().endRound('opponent');
-    } else {
-      set({ playerHealth: newPlayerHealth, playerPosition: knockedPosition, hitEvent });
-    }
+      if (newPlayerHealth <= 0) {
+        set({ playerHealth: 0, playerPosition: knockedPosition, hitEvent });
+        useGameStore.getState().endRound('opponent');
+      } else {
+        set({ playerHealth: newPlayerHealth, playerPosition: knockedPosition, hitEvent });
+      }
+    });
   },
 
   opponentAI: () => {
@@ -489,6 +512,8 @@ export const useGameStore = create<GameStore>((set) => ({
       let h = 0;
       let dir = 1;
       oppJumpLoop = setInterval(() => {
+        // Paused: hold still, keeping the loop alive until resumed.
+        if (useGameStore.getState().gameStatus === 'paused') return;
         if (useGameStore.getState().gameStatus !== 'playing') {
           if (oppJumpLoop) { clearInterval(oppJumpLoop); oppJumpLoop = undefined; }
           oppCross = undefined;
@@ -509,6 +534,8 @@ export const useGameStore = create<GameStore>((set) => ({
 
     const runAI = () => {
       const state = useGameStore.getState();
+      // Paused: hold still, keeping the loop alive until resumed.
+      if (state.gameStatus === 'paused') return;
       if (state.gameStatus !== 'playing') {
         if (aiLoop) { clearInterval(aiLoop); aiLoop = undefined; }
         return;
@@ -583,6 +610,8 @@ export const useGameStore = create<GameStore>((set) => ({
     if (physicsLoop) clearInterval(physicsLoop);
     physicsLoop = setInterval(() => {
       const s = useGameStore.getState();
+      // Paused: hold still, keeping the loop alive until resumed.
+      if (s.gameStatus === 'paused') return;
       if (s.gameStatus !== 'playing') {
         if (physicsLoop) { clearInterval(physicsLoop); physicsLoop = undefined; }
         return;
@@ -661,6 +690,8 @@ export const useGameStore = create<GameStore>((set) => ({
       if (roundTimerLoop) clearInterval(roundTimerLoop);
       roundTimerLoop = setInterval(() => {
         const s = useGameStore.getState();
+        // Paused: hold still, keeping the loop alive until resumed.
+        if (s.gameStatus === 'paused') return;
         if (s.gameStatus !== 'playing') {
           if (roundTimerLoop) { clearInterval(roundTimerLoop); roundTimerLoop = undefined; }
           return;
