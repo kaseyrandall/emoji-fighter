@@ -165,26 +165,29 @@ function Glow({ position, color, scale = 1.6, opacity = 0.7 }: { position: [numb
 
 // --- Per-stage props -------------------------------------------------------
 
+// A small paper lantern sitting on top of a rail post. Kept low and to the
+// sides of the ring (hanging lanterns ended up clipped behind the HUD at the
+// top of the screen as stray orange blobs), with a soft flicker.
 function Lantern({ position, phase = 0 }: { position: [number, number, number]; phase?: number }) {
-  const ref = React.useRef<THREE.Group>(null);
+  const glow = React.useRef<THREE.Sprite>(null);
   useFrame(({ clock }) => {
-    if (ref.current) ref.current.rotation.z = Math.sin(clock.elapsedTime * 1.3 + phase) * 0.08;
+    const t = clock.elapsedTime * 2.2 + phase;
+    const m = glow.current?.material as THREE.SpriteMaterial | undefined;
+    if (m) m.opacity = 0.3 + Math.sin(t) * 0.04 + Math.sin(t * 3.7) * 0.03;
   });
   return (
-    <group ref={ref} position={position}>
-      <mesh position={[0, 1.2, 0]}>
-        <cylinderGeometry args={[0.015, 0.015, 2.4, 4]} />
-        <meshBasicMaterial color="#2a1a0c" />
+    <group position={position}>
+      <mesh position={[0, 0.2, 0]}>
+        <sphereGeometry args={[0.2, 14, 10]} />
+        <meshStandardMaterial color="#ff8a3d" emissive="#ff7a2a" emissiveIntensity={1.1} toneMapped={false} />
       </mesh>
-      <mesh>
-        <sphereGeometry args={[0.32, 16, 12]} />
-        <meshStandardMaterial color="#ff8a3d" emissive="#ff7a2a" emissiveIntensity={1.4} toneMapped={false} />
-      </mesh>
-      <mesh position={[0, 0.34, 0]}>
-        <cylinderGeometry args={[0.16, 0.2, 0.1, 10]} />
+      <mesh position={[0, 0.42, 0]}>
+        <cylinderGeometry args={[0.1, 0.13, 0.07, 10]} />
         <meshStandardMaterial color="#3a2410" />
       </mesh>
-      <Glow position={[0, 0, 0]} color="#ffb060" scale={2.2} opacity={0.6} />
+      <sprite ref={glow} position={[0, 0.2, 0.05]} scale={1.1}>
+        <spriteMaterial map={glowTexture()} color="#ffb060" transparent opacity={0.3} depthWrite={false} blending={THREE.AdditiveBlending} />
+      </sprite>
     </group>
   );
 }
@@ -212,10 +215,9 @@ function CanopyProps() {
           <meshStandardMaterial color="#5a3a1e" />
         </mesh>
       ))}
-      <Lantern position={[-7, 4.4, -2]} />
-      <Lantern position={[-2.5, 5, -3.5]} phase={1} />
-      <Lantern position={[3, 4.7, -2.6]} phase={2} />
-      <Lantern position={[8, 4.3, -1.8]} phase={3} />
+      {/* On the outer rail posts */}
+      <Lantern position={[-10, 1.1, -2.8]} />
+      <Lantern position={[10, 1.1, -2.8]} phase={2} />
     </group>
   );
 }
@@ -271,8 +273,9 @@ function PirateProps() {
         <cylinderGeometry args={[0.18, 0.25, 12, 10]} />
         <meshStandardMaterial color="#4a2e18" />
       </mesh>
-      <Lantern position={[-8, 3.8, -2.5]} />
-      <Lantern position={[7.5, 4, -2.2]} phase={2} />
+      {/* On the outer mooring posts */}
+      <Lantern position={[-6, 1.2, -2.7]} />
+      <Lantern position={[6, 1.2, -2.7]} phase={2} />
     </group>
   );
 }

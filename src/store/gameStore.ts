@@ -44,7 +44,7 @@ let oppJumpLoop: ReturnType<typeof setInterval> | undefined;
 // The KO beat between a round ending and the next round (or the win/lose
 // screen). Tracked so a quit/reset can cancel it.
 let roundEndTimeout: ReturnType<typeof setTimeout> | undefined;
-const KO_DURATION = 1500;
+const KO_DURATION = 2000; // long enough to see the loser land and lie flat
 const clearRoundLoops = () => {
   if (countdownLoop) { clearInterval(countdownLoop); countdownLoop = undefined; }
   if (roundTimerLoop) { clearInterval(roundTimerLoop); roundTimerLoop = undefined; }

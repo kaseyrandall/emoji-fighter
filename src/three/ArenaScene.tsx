@@ -35,6 +35,7 @@ interface FxState {
   hitstop: number; // seconds of frozen animation remaining
   slowmo: number; // seconds of KO slow motion remaining
   zoom: number; // brief camera punch-in, 0..1
+  koDust: number; // countdown to the KO landing's dust puff
 }
 
 const koScreen = (s: string) => s === 'roundEnd' || s === 'won' || s === 'lost' || s === 'champion';
@@ -183,12 +184,30 @@ function EventFx({ fx, vfx }: { fx: React.MutableRefObject<FxState>; vfx: React.
     const api = vfx.current;
     if (!api) return;
 
+    // Dust kicked up as the KO'd fighter lands flat on the floor.
+    if (f.koDust > 0) {
+      f.koDust -= dt;
+      if (f.koDust <= 0 && s.roundLoser) {
+        const loser = s.roundLoser === 'player' ? s.playerPosition : s.opponentPosition;
+        const other = s.roundLoser === 'player' ? s.opponentPosition : s.playerPosition;
+        // It lies behind its feet, away from the winner.
+        const back = Math.sign(toWorldX(loser) - toWorldX(other)) || 1;
+        v.set(toWorldX(loser) + back * 0.9, 0.15, 0.2);
+        api.burst(v, '#d8cbb4', 34, 3.2);
+        api.ring(v.setY(0.03), '#e7dccb', 2.2, 0.45, true);
+        f.shake = 0.15;
+        f.shakeMag = 0.2;
+      }
+    }
+
     // Round transitions: wipe leftover effects; KO triggers slow motion.
     if (s.gameStatus !== last.current.status) {
       if (s.gameStatus === 'roundEnd') {
         f.slowmo = 0.9;
         f.shake = 0.3;
         f.shakeMag = 0.5;
+        // The loser's fall (slowed by the KO slow-mo) hits the floor ~1s in.
+        f.koDust = 1.0;
       }
       if (s.gameStatus === 'intro' || s.gameStatus === 'ready') api.clear();
       last.current.status = s.gameStatus;
@@ -303,7 +322,7 @@ function SceneContents() {
   const opponent = useGameStore((s) => s.opponent);
   const stageId = useGameStore((s) => s.currentStage);
   const stage = stages.find((s) => s.id === stageId) ?? stages[0];
-  const fx = React.useRef<FxState>({ shake: 0, shakeMag: 0, hitstop: 0, slowmo: 0, zoom: 0 });
+  const fx = React.useRef<FxState>({ shake: 0, shakeMag: 0, hitstop: 0, slowmo: 0, zoom: 0, koDust: 0 });
   const vfx = React.useRef<VfxApi>(null);
   if (!player || !opponent) return null;
   return (

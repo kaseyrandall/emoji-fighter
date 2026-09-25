@@ -24,6 +24,20 @@ const circle = new THREE.PlaneGeometry(1, 1);
 const easeOut = (t: number) => 1 - (1 - t) * (1 - t);
 const easeIn = (t: number) => t * t;
 const clamp01 = (t: number) => Math.min(1, Math.max(0, t));
+// Lands, then settles with two small bounces.
+const bounceOut = (t: number) => {
+  const n = 7.5625;
+  const d = 2.75;
+  if (t < 1 / d) return n * t * t;
+  if (t < 2 / d) return n * (t -= 1.5 / d) * t + 0.75;
+  if (t < 2.5 / d) return n * (t -= 2.25 / d) * t + 0.9375;
+  return n * (t -= 2.625 / d) * t + 0.984375;
+};
+const KO_FALL_S = 0.42;
+// Lying down: how high the body's centre rests above the floor (about half
+// the emoji's visible width), and how far it rolls face-up onto the floor.
+const KO_REST_HEIGHT = 0.62;
+const KO_FACE_UP = 0.45;
 const damp = (cur: number, target: number, lambda: number, dt: number) =>
   THREE.MathUtils.lerp(cur, target, 1 - Math.exp(-lambda * dt));
 // Snap-out / ease-back curve for a strike: fast extension, slower recovery.
@@ -87,7 +101,8 @@ export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 
     attack: null as null | { move: AttackMove; t: number },
     hit: null as null | { t: number; force: number; blocked: boolean },
     guard: 0,
-    ko: 0, // 0..1 topple progress
+    ko: 0, // 0..1 fall progress
+    koT: 0, // seconds since the KO
     win: 0,
     charge: 0,
     lean: 0,
@@ -117,7 +132,15 @@ export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 
     a.y = damp(a.y, inp.y, 30, rawDt);
     const targetYaw = inp.facing === 1 ? Math.PI + 0.3 : -0.3;
     a.yaw = damp(a.yaw, targetYaw, 20, dt);
-    a.ko = damp(a.ko, inp.pose === 'ko' ? 1 : 0, inp.pose === 'ko' ? 7 : 10, dt);
+    // KO fall: a timed drop that lands with a little bounce; standing back
+    // up (next round) eases out smoothly.
+    if (inp.pose === 'ko') {
+      a.koT += dt;
+      a.ko = bounceOut(clamp01(a.koT / KO_FALL_S));
+    } else {
+      a.koT = 0;
+      a.ko = damp(a.ko, 0, 10, dt);
+    }
     a.win = damp(a.win, inp.pose === 'win' ? 1 : 0, 8, dt);
     a.charge = damp(a.charge, inp.charged ? 1 : 0, 6, dt);
     a.guard = damp(a.guard, inp.guard && inp.pose === 'fight' ? 1 : 0, 18, dt);
@@ -239,11 +262,23 @@ export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 
       rg.lerp(new THREE.Vector3(0.6, 2.25, 0.1), a.win);
     }
 
-    // --- KO topple: the whole rig falls backward about the feet ---
-    const koRot = -1.42 * easeOut(a.ko);
-    if (a.ko > 0.01) {
-      lg.lerp(new THREE.Vector3(0.2, 0.25, 0.7), a.ko);
-      rg.lerp(new THREE.Vector3(1.1, 0.2, -0.5), a.ko);
+    // --- KO: falls flat onto its back on the floor ---
+    // Pivoting about the feet, the body swings a full 90° backward, is raised
+    // so it rests on the floor rather than sinking into it, and rolls a
+    // little face-up (toward the camera's view of the floor). The gloves
+    // drop to the floor beside it.
+    const ko = a.ko;
+    let koRotX = 0;
+    if (ko > 0.001) {
+      bodyRotZ = bodyRotZ * (1 - ko) - (Math.PI / 2) * ko;
+      bodyY = bodyY * (1 - ko) + KO_REST_HEIGHT * ko;
+      // The visible side is the back of the art when facing right, so roll
+      // the other way to keep the face turning up.
+      koRotX = -KO_FACE_UP * ko * Math.sign(Math.cos(a.yaw) || 1);
+      lg.lerp(new THREE.Vector3(0.35, 0.16, 0.65), ko);
+      rg.lerp(new THREE.Vector3(1.55, 0.16, 0.35), ko);
+      leadRot *= 1 - ko;
+      rearRot *= 1 - ko;
     }
 
     // Apply.
@@ -252,7 +287,7 @@ export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 
     lift.current!.scale.setScalar(size);
     yaw.current!.rotation.y = a.yaw;
     body.current!.position.set(bodyX, bodyY, 0);
-    body.current!.rotation.z = bodyRotZ + koRot;
+    body.current!.rotation.set(koRotX, 0, bodyRotZ);
     body.current!.scale.set(1 / Math.sqrt(bodyScaleY), bodyScaleY, 1);
     spin.current!.rotation.y = spinY;
     leadGlove.current!.position.copy(lg);
@@ -266,6 +301,8 @@ export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 
     const h = a.y;
     const s = Math.max(0.35, 1 - h * 0.18) * size;
     shadow.current!.scale.set(2.1 * s * (1 + a.ko * 0.6), 0.75 * s, 1);
+    // A body lying down sits behind its feet: move the shadow under it.
+    shadow.current!.position.x = -inp.facing * 0.9 * a.ko;
     shadowMat.opacity = Math.max(0.25, 1 - h * 0.2);
 
     // Hit flash: push the art toward hot red, briefly.
