@@ -15,7 +15,7 @@ npm run dev
   - `ArenaScene.tsx`: the fight scene, with the fighting-game camera, hitstop, KO slow-mo and hit effects.
   - `Fighter.tsx`: the procedurally animated emoji brawler rig (floating gloves).
   - `EmojiBody.tsx`: turns any emoji into a thick "cookie-cutter" 3D body.
-  - `Stage3D.tsx`: the five stages (painted backdrops, 3D platform, props, lighting).
+  - `Stage3D.tsx`: the six stages (painted backdrops, 3D platform, props, lighting).
   - `Vfx.tsx`: pooled sparks, shockwave rings, damage numbers and per-character special effects.
   - `LandingScene.tsx` / `FighterPreview.tsx`: the 3D title screen and the character-select turntable.
 - HUD, menus and touch controls stay as React DOM layered over the canvas.

@@ -218,7 +218,7 @@ export function shadowTexture(): THREE.CanvasTexture {
   return shadowTex;
 }
 
-export type FloorPattern = 'planks' | 'stone' | 'hazard' | 'tiles' | 'deck';
+export type FloorPattern = 'planks' | 'stone' | 'hazard' | 'tiles' | 'deck' | 'asphalt';
 
 const floorCache = new Map<string, THREE.CanvasTexture>();
 
@@ -312,6 +312,37 @@ export function floorTexture(pattern: FloorPattern, base: string, line: string):
       ctx.beginPath();
       ctx.moveTo(x, y + 6);
       ctx.lineTo(x + 10, y - 2);
+      ctx.stroke();
+    }
+  } else if (pattern === 'asphalt') {
+    // Sun-baked concrete: blotchy stains, grit, a few wandering cracks and a
+    // worn yellow parking line.
+    for (let i = 0; i < 26; i++) {
+      ctx.fillStyle = `rgba(${rand() > 0.6 ? '120,80,40' : '0,0,0'},${0.05 + rand() * 0.1})`;
+      ctx.beginPath();
+      ctx.ellipse(rand() * size, rand() * size, 12 + rand() * 50, 8 + rand() * 30, rand() * Math.PI, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    for (let i = 0; i < 900; i++) {
+      ctx.fillStyle = `rgba(${rand() > 0.5 ? '255,255,255' : '0,0,0'},${0.04 + rand() * 0.08})`;
+      ctx.fillRect(rand() * size, rand() * size, 2, 2);
+    }
+    ctx.fillStyle = 'rgba(214,168,60,0.35)';
+    ctx.fillRect(0, size * 0.72, size, 10);
+    ctx.lineCap = 'round';
+    for (let c = 0; c < 5; c++) {
+      let x = 40 + rand() * (size - 80);
+      let y = 40 + rand() * (size - 80);
+      let a = rand() * Math.PI * 2;
+      ctx.lineWidth = 1.5 + rand() * 1.5;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      for (let k = 0; k < 14; k++) {
+        a += (rand() - 0.5) * 1.1;
+        x = Math.max(4, Math.min(size - 4, x + Math.cos(a) * 14));
+        y = Math.max(4, Math.min(size - 4, y + Math.sin(a) * 14));
+        ctx.lineTo(x, y);
+      }
       ctx.stroke();
     }
   } else if (pattern === 'tiles') {

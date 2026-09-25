@@ -133,7 +133,21 @@ const shuffle = <T,>(arr: T[]): T[] => {
   return copy;
 };
 
-const randomStageId = () => stages[Math.floor(Math.random() * stages.length)].id;
+// Stages are dealt from a shuffled deck so a gauntlet run sees every stage
+// before any repeats (and never the same one twice in a row).
+let stageDeck: string[] = [];
+let lastStageId = '';
+const nextStageId = (freshRun = false) => {
+  if (freshRun) stageDeck = [];
+  if (stageDeck.length === 0) {
+    stageDeck = shuffle(stages.map((st) => st.id));
+    if (stageDeck.length > 1 && stageDeck[stageDeck.length - 1] === lastStageId) {
+      [stageDeck[0], stageDeck[stageDeck.length - 1]] = [stageDeck[stageDeck.length - 1], stageDeck[0]];
+    }
+  }
+  lastStageId = stageDeck.pop()!;
+  return lastStageId;
+};
 
 // Peak of the jump arc, in px. The arena scales this down when a short
 // viewport can't fit the whole arc (see jumpScale in GameArena).
@@ -346,7 +360,7 @@ export const useGameStore = create<GameStore>((set) => ({
       (char) => char.id !== (useGameStore.getState().selectedCharacter?.id)
     );
     const randomOpponent = availableOpponents[Math.floor(Math.random() * availableOpponents.length)];
-    set({ opponent: randomOpponent, currentStage: randomStageId() });
+    set({ opponent: randomOpponent, currentStage: nextStageId() });
   },
 
   // Build the ladder of opponents and start the first bout.
@@ -358,7 +372,7 @@ export const useGameStore = create<GameStore>((set) => ({
       gauntletOpponents: ladder,
       gauntletStage: 0,
       opponent: ladder[0],
-      currentStage: randomStageId(),
+      currentStage: nextStageId(true),
       playerHealth: roundHp(character.health),
       opponentHealth: roundHp(ladder[0].health),
       ...freshBout(),
@@ -379,7 +393,7 @@ export const useGameStore = create<GameStore>((set) => ({
     set({
       gauntletStage: nextStage,
       opponent: nextOpponent,
-      currentStage: randomStageId(),
+      currentStage: nextStageId(),
       playerHealth: roundHp(state.selectedCharacter?.health),
       opponentHealth: roundHp(nextOpponent.health),
       ...freshBout(),

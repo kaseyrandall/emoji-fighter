@@ -9,7 +9,7 @@ import { useQuality } from '../store/qualityStore';
 // textured fight platform sits in front of it, and each stage adds its own
 // props, lighting and drifting ambient particles for depth and parallax.
 
-type Props = 'canopy' | 'pirate' | 'temple' | 'factory' | 'subway';
+type Props = 'canopy' | 'pirate' | 'temple' | 'factory' | 'subway' | 'gas';
 
 interface Theme {
   floor: { pattern: FloorPattern; base: string; line: string; repeat: [number, number] };
@@ -46,6 +46,10 @@ const THEMES: Record<string, Theme> = {
   'neon-subway': {
     floor: { pattern: 'tiles', base: '#2c2638', line: '#6a5790', repeat: [4, 1.4] },
     trim: '#ffe14d', fog: '#140f24', sky: '#d6c6ff', ground: '#1b1030', key: '#cdb8ff', rim: '#ff3fd0', motes: '#ff7ae6', props: 'subway', paintedFloor: 0.39,
+  },
+  'sunset-gas-station': {
+    floor: { pattern: 'asphalt', base: '#6e5e56', line: '#2a211d', repeat: [3, 1.2] },
+    trim: '#ffb347', fog: '#3a1f24', sky: '#ffc48a', ground: '#2a1a1c', key: '#ffa860', rim: '#ff6f91', motes: '#ffcf8a', props: 'gas', paintedFloor: 0.46,
   },
 };
 
@@ -444,12 +448,76 @@ function SubwayProps() {
   );
 }
 
+function Cactus({ position, scale = 1 }: { position: [number, number, number]; scale?: number }) {
+  const mat = <meshStandardMaterial color="#4f7a3a" roughness={0.9} />;
+  return (
+    <group position={position} scale={scale}>
+      <mesh position={[0, 1.1, 0]}>
+        <capsuleGeometry args={[0.28, 1.7, 6, 12]} />
+        {mat}
+      </mesh>
+      <mesh position={[-0.5, 1.2, 0]}>
+        <capsuleGeometry args={[0.16, 0.6, 6, 10]} />
+        {mat}
+      </mesh>
+      <mesh position={[-0.36, 0.9, 0]} rotation={[0, 0, Math.PI / 2]}>
+        <capsuleGeometry args={[0.14, 0.2, 6, 10]} />
+        {mat}
+      </mesh>
+      <mesh position={[0.46, 1.55, 0]}>
+        <capsuleGeometry args={[0.14, 0.5, 6, 10]} />
+        {mat}
+      </mesh>
+      <mesh position={[0.33, 1.3, 0]} rotation={[0, 0, Math.PI / 2]}>
+        <capsuleGeometry args={[0.12, 0.16, 6, 10]} />
+        {mat}
+      </mesh>
+    </group>
+  );
+}
+
+function GasProps() {
+  return (
+    <group>
+      {/* Stacked tyres, stage left */}
+      {[0, 1, 2].map((i) => (
+        <mesh key={i} position={[-10.6, 0.2 + i * 0.36, -1.6]} rotation={[Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[0.5, 0.2, 10, 22]} />
+          <meshStandardMaterial color="#1f1c1c" roughness={0.95} />
+        </mesh>
+      ))}
+      <mesh position={[-11.8, 0.2, -0.6]} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[0.5, 0.2, 10, 22]} />
+        <meshStandardMaterial color="#1f1c1c" roughness={0.95} />
+      </mesh>
+      {/* Rusty oil drums, stage right */}
+      {([[10.4, -1.4, '#8a3a24'], [11.5, -0.6, '#4a6a7a']] as [number, number, string][]).map(([x, z, c]) => (
+        <group key={x} position={[x, 0.6, z]}>
+          <mesh>
+            <cylinderGeometry args={[0.45, 0.45, 1.2, 18]} />
+            <meshStandardMaterial color={c} roughness={0.7} metalness={0.3} />
+          </mesh>
+          {[-0.3, 0.3].map((y) => (
+            <mesh key={y} position={[0, y, 0]} rotation={[Math.PI / 2, 0, 0]}>
+              <torusGeometry args={[0.46, 0.03, 6, 20]} />
+              <meshStandardMaterial color="#2b2b2b" metalness={0.6} roughness={0.4} />
+            </mesh>
+          ))}
+        </group>
+      ))}
+      <Cactus position={[-13, 0, -4]} scale={1.3} />
+      <Cactus position={[13.2, 0, -4.5]} scale={1.1} />
+    </group>
+  );
+}
+
 const PROPS: Record<Props, () => React.ReactElement> = {
   canopy: CanopyProps,
   pirate: PirateProps,
   temple: TempleProps,
   factory: FactoryProps,
   subway: SubwayProps,
+  gas: GasProps,
 };
 
 export function Stage3D({ stage }: { stage: Stage }) {
