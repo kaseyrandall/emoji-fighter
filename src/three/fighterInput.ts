@@ -12,10 +12,12 @@ export interface FighterInput {
   attackMove: AttackMove | null;
   hitSeq: number; // bumps once per hit taken
   hitMove: AttackMove | null;
+  hitBlocked: boolean; // the last hit taken was guarded
+  guard: boolean; // holding a block
   pose: 'fight' | 'ko' | 'win';
   charged: boolean; // super meter full: pulsing aura
 }
 
 export const defaultFighterInput = (x = 0, facing: 1 | -1 = 1): FighterInput => ({
-  x, y: 0, facing, vel: 0, attackSeq: 0, attackMove: null, hitSeq: 0, hitMove: null, pose: 'fight', charged: false,
+  x, y: 0, facing, vel: 0, attackSeq: 0, attackMove: null, hitSeq: 0, hitMove: null, hitBlocked: false, guard: false, pose: 'fight', charged: false,
 });

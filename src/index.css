@@ -40,11 +40,20 @@
   .game-button {
     @apply select-none touch-none;
   }
+  /* Sits low in the corners, where thumbs rest when holding a phone in
+     landscape. */
   .game-controls {
-    @apply fixed bottom-0 left-0 right-0 p-4 flex justify-between items-center;
-    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
-    padding-left: calc(1rem + env(safe-area-inset-left));
+    @apply fixed bottom-0 left-0 right-0 flex justify-between items-center;
+    padding-bottom: calc(0.375rem + env(safe-area-inset-bottom));
+    padding-left: calc(1.25rem + env(safe-area-inset-left));
     padding-right: calc(1rem + env(safe-area-inset-right));
+  }
+  /* An invisible halo that extends a button's touch target past its edge. */
+  .touch-pad::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border-radius: 9999px;
   }
   /* Show the touch controls on every touch device (phones AND large iPads),
      and hide them only on true mouse/desktop pointers, which play by keyboard.

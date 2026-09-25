@@ -46,11 +46,16 @@ export interface GameState {
   playerFacing: 'left' | 'right';
 }
 
+// How an attack in range resolved: it landed, was guarded (chip damage), or
+// whiffed because the target was out of its vertical reach (a jump dodge).
+export type HitResult = 'hit' | 'blocked' | 'dodged';
+
 export interface HitEvent {
   target: 'player' | 'opponent';
   amount: number;
   move: Move | null;
   seq: number;
+  result: HitResult;
 }
 
 export type AttackMove = 'punch' | 'heavy' | 'special';

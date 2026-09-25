@@ -194,7 +194,10 @@ export function textTexture(text: string, fill: string, stroke = '#000'): THREE.
   const ctx = canvas.getContext('2d')!;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
+  // Shrink longer callouts ("BLOCK", "DODGE") to fit the canvas.
   ctx.font = `64px "Press Start 2P", monospace`;
+  const fit = Math.min(1, (w - 24) / Math.max(1, ctx.measureText(text).width));
+  if (fit < 1) ctx.font = `${Math.floor(64 * fit)}px "Press Start 2P", monospace`;
   ctx.lineJoin = 'round';
   ctx.lineWidth = 14;
   ctx.strokeStyle = stroke;

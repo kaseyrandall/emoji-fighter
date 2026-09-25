@@ -452,17 +452,18 @@ export default function GameArena() {
       {(gameStatus === 'ready' || gameStatus === 'playing') && (
         <div className="game-controls items-end">
           {/* Movement joystick */}
-          <Joystick onMoveDir={setMoveDir} onJump={() => performMove('jump')} size={116} />
+          <Joystick onMoveDir={setMoveDir} onJump={() => performMove('jump')} size={136} hitPad={28} />
 
           {/* Attack cluster — special as a clearly-visible apex above the
               punch / heavy-punch primary pair (a triangle, no button hidden behind
-              another). */}
-          <div className="relative w-[10rem] h-[8.5rem] shrink-0 select-none">
+              another). Buttons fire on touch-down (not release) for snappy
+              inputs, and .touch-pad gives each a larger invisible hit area. */}
+          <div className="relative w-[13rem] h-[10.75rem] shrink-0 select-none">
             {/* Special apex — always visible; the ring fills as the super meter
                 charges and the whole button glows once it's ready. */}
             <motion.button
-              onClick={fireSpecial}
-              className="game-button absolute top-0 left-1/2 -translate-x-1/2 w-16 h-16 rounded-full flex items-center justify-center text-2xl overflow-hidden focus:outline-none active:brightness-110"
+              onPointerDown={fireSpecial}
+              className="game-button touch-pad absolute top-0 left-1/2 -translate-x-1/2 w-[4.5rem] h-[4.5rem] rounded-full flex items-center justify-center text-3xl focus:outline-none active:brightness-110"
               style={{
                 background: 'radial-gradient(circle at 50% 35%, #a855f7, #6b21a8)',
                 opacity: specialReady ? 1 : 0.7,
@@ -474,23 +475,25 @@ export default function GameArena() {
               aria-label="Special"
             >
               {/* super meter fill (charged by landing attacks) */}
-              <span
-                className="absolute inset-x-0 bottom-0 bg-purple-200/70 pointer-events-none transition-[height] duration-200"
-                style={{ height: `${specialMeter}%` }}
-              />
+              <span className="absolute inset-0 rounded-full overflow-hidden pointer-events-none">
+                <span
+                  className="absolute inset-x-0 bottom-0 bg-purple-200/70 transition-[height] duration-200"
+                  style={{ height: `${specialMeter}%` }}
+                />
+              </span>
               <span className="relative drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]">✨</span>
             </motion.button>
 
             {/* Punch (primary) */}
             <button
-              onClick={() => { performMove('punch'); playMoveSound('punch'); }}
-              className="game-button absolute bottom-0 left-0.5 w-[4.5rem] h-[4.5rem] rounded-full flex items-center justify-center text-3xl bg-red-500/55 border-2 border-red-300/70 focus:outline-none active:bg-red-600/70"
+              onPointerDown={() => { performMove('punch'); playMoveSound('punch'); }}
+              className="game-button touch-pad absolute bottom-0 left-0 w-[5.5rem] h-[5.5rem] rounded-full flex items-center justify-center text-4xl bg-red-500/55 border-2 border-red-300/70 focus:outline-none active:bg-red-600/70"
               aria-label="Punch"
             >👊</button>
             {/* Heavy punch (primary) */}
             <button
-              onClick={() => { performMove('heavy'); playMoveSound('heavy'); }}
-              className="game-button absolute bottom-0 right-0.5 w-[4.5rem] h-[4.5rem] rounded-full flex items-center justify-center text-3xl bg-blue-500/55 border-2 border-blue-300/70 focus:outline-none active:bg-blue-600/70"
+              onPointerDown={() => { performMove('heavy'); playMoveSound('heavy'); }}
+              className="game-button touch-pad absolute bottom-0 right-0 w-[5.5rem] h-[5.5rem] rounded-full flex items-center justify-center text-4xl bg-blue-500/55 border-2 border-blue-300/70 focus:outline-none active:bg-blue-600/70"
               aria-label="Heavy punch"
             >💥</button>
           </div>

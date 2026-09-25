@@ -1,7 +1,7 @@
 import React from 'react';
 import * as THREE from 'three';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { useGameStore, JUMP_PEAK } from '../store/gameStore';
+import { useGameStore, JUMP_PEAK, isPlayerBlocking } from '../store/gameStore';
 import { stages } from '../data/stages';
 import { Character } from '../types/game';
 import { Fighter } from './Fighter';
@@ -44,8 +44,9 @@ function readPlayer(out: FighterInput): FighterInput {
   out.vel = s.playerVel * VEL_SCALE;
   out.attackSeq = s.playerAttackSeq;
   out.attackMove = s.currentMove === 'punch' || s.currentMove === 'heavy' || s.currentMove === 'special' ? s.currentMove : out.attackMove;
-  if (s.hitEvent?.target === 'player') {
+  if (s.hitEvent?.target === 'player' && s.hitEvent.result !== 'dodged') {
     out.hitSeq = s.hitEvent.seq;
+    out.hitBlocked = s.hitEvent.result === 'blocked';
     out.hitMove = s.hitEvent.move === 'punch' || s.hitEvent.move === 'heavy' || s.hitEvent.move === 'special' ? s.hitEvent.move : null;
   }
   out.pose = s.roundLoser === 'player' && koScreen(s.gameStatus)
@@ -54,6 +55,7 @@ function readPlayer(out: FighterInput): FighterInput {
     ? 'win'
     : 'fight';
   out.charged = s.specialMeter >= 100 && s.gameStatus === 'playing';
+  out.guard = isPlayerBlocking(s);
   return out;
 }
 
@@ -69,8 +71,9 @@ function readOpponent(out: FighterInput, lastX: { v: number }): FighterInput {
   out.facing = px > x ? 1 : -1;
   out.attackSeq = s.opponentAttackSeq;
   out.attackMove = s.opponentMove;
-  if (s.hitEvent?.target === 'opponent') {
+  if (s.hitEvent?.target === 'opponent' && s.hitEvent.result !== 'dodged') {
     out.hitSeq = s.hitEvent.seq;
+    out.hitBlocked = s.hitEvent.result === 'blocked';
     out.hitMove = s.hitEvent.move === 'punch' || s.hitEvent.move === 'heavy' || s.hitEvent.move === 'special' ? s.hitEvent.move : null;
   }
   out.pose = s.roundLoser === 'opponent' && koScreen(s.gameStatus)
@@ -79,6 +82,7 @@ function readOpponent(out: FighterInput, lastX: { v: number }): FighterInput {
     ? 'win'
     : 'fight';
   out.charged = false;
+  out.guard = s.opponentBlocking && s.gameStatus === 'playing';
   return out;
 }
 
@@ -219,6 +223,25 @@ function EventFx({ fx, vfx }: { fx: React.MutableRefObject<FxState>; vfx: React.
       const attackerX = h.target === 'player' ? toWorldX(s.opponentPosition) : toWorldX(s.playerPosition);
       // Sparks fly from the side the blow came from.
       const side = Math.sign(attackerX - target.x) || 1;
+
+      if (h.result === 'dodged') {
+        // Whiffed under / over a jump: just call it out on the dodger.
+        v.set(target.x, target.y + 2.1, 0.6);
+        api.number(v, 'DODGE', '#a5f3fc');
+        return;
+      }
+      if (h.result === 'blocked') {
+        // Guarded: a cool spray off the raised gloves, chip damage in the callout.
+        v.set(target.x + side * 0.75, target.y + 1.25, 0.5);
+        api.burst(v, '#7dd3fc', special ? 30 : 16, 4.5);
+        api.ring(v, '#bae6fd', special ? 1.4 : 0.8, 0.22);
+        v.set(target.x + side * -0.35, target.y + 2.1, 0.6);
+        api.number(v, 'BLOCK', '#7dd3fc');
+        f.shake = 0.12;
+        f.shakeMag = special ? 0.25 : 0.12;
+        f.hitstop = 0.035;
+        return;
+      }
       v.set(target.x + side * 0.55, target.y + (h.move === 'heavy' ? 1.45 : 1.15), 0.4);
       // A special's impact sparks take the attacker's special colour.
       const attacker = h.target === 'player' ? s.opponent : s.selectedCharacter;

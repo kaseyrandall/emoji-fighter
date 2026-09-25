@@ -82,7 +82,8 @@ export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 
     lastAttackSeq: read().attackSeq,
     lastHitSeq: read().hitSeq,
     attack: null as null | { move: AttackMove; t: number },
-    hit: null as null | { t: number; force: number },
+    hit: null as null | { t: number; force: number; blocked: boolean },
+    guard: 0,
     ko: 0, // 0..1 topple progress
     win: 0,
     charge: 0,
@@ -102,7 +103,9 @@ export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 
     }
     if (inp.hitSeq !== a.lastHitSeq) {
       a.lastHitSeq = inp.hitSeq;
-      a.hit = { t: 0, force: inp.hitMove === 'special' ? 1.6 : inp.hitMove === 'heavy' ? 1.3 : 1 };
+      const force = inp.hitMove === 'special' ? 1.6 : inp.hitMove === 'heavy' ? 1.3 : 1;
+      // A guarded blow only rocks the fighter a little.
+      a.hit = { t: 0, force: inp.hitBlocked ? force * 0.4 : force, blocked: inp.hitBlocked };
     }
 
     // Follow the simulation smoothly (it ticks at a fixed rate; we render at
@@ -114,6 +117,7 @@ export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 
     a.ko = damp(a.ko, inp.pose === 'ko' ? 1 : 0, inp.pose === 'ko' ? 7 : 10, dt);
     a.win = damp(a.win, inp.pose === 'win' ? 1 : 0, 8, dt);
     a.charge = damp(a.charge, inp.charged ? 1 : 0, 6, dt);
+    a.guard = damp(a.guard, inp.guard && inp.pose === 'fight' ? 1 : 0, 18, dt);
     // Lean into movement, in the fighter's own forward direction.
     const forwardVel = inp.vel * inp.facing;
     a.lean = damp(a.lean, THREE.MathUtils.clamp(forwardVel * 0.09, -0.22, 0.22), 10, dt);
@@ -146,6 +150,14 @@ export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 
     if (airborne) {
       lg.y += 0.2; rg.y += 0.25;
       bodyScaleY *= 1.04;
+    }
+
+    // --- Guard: both gloves up in front of the face, leaning back a touch ---
+    if (a.guard > 0.01) {
+      lg.lerp(new THREE.Vector3(-0.8, 1.45, 0.6), a.guard);
+      rg.lerp(new THREE.Vector3(-0.65, 1.05, 0.55), a.guard);
+      bodyRotZ -= 0.12 * a.guard;
+      bodyX += 0.08 * a.guard;
     }
 
     // --- Attack swing ---
@@ -187,6 +199,7 @@ export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 
 
     // --- Hit recoil + flash ---
     let flash = 0;
+    let blockFlash = false;
     if (a.hit) {
       a.hit.t += dt;
       const dur = 0.2 + 0.16 * a.hit.force;
@@ -196,6 +209,7 @@ export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 
       bodyX += 0.28 * k;
       bodyScaleY *= 1 - 0.08 * k;
       flash = 1 - p;
+      blockFlash = a.hit.blocked;
       if (p >= 1) a.hit = null;
     }
 
@@ -237,8 +251,10 @@ export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 
     // Hit flash: push the art toward hot red, briefly.
     const m = mats.current;
     if (m) {
-      m.face.emissive.setRGB(1, 1 - flash * 0.85, 1 - flash * 0.85);
-      m.face.emissiveIntensity = 0.3 + flash * 0.9;
+      // Red for a clean hit, a cool blue for a blocked one.
+      if (blockFlash) m.face.emissive.setRGB(1 - flash * 0.6, 1 - flash * 0.2, 1);
+      else m.face.emissive.setRGB(1, 1 - flash * 0.85, 1 - flash * 0.85);
+      m.face.emissiveIntensity = 0.3 + flash * (blockFlash ? 0.5 : 0.9);
     }
     for (const g of gloveMats.current) g.face.emissiveIntensity = 0.3 + a.charge * 0.35 * (1 + pulseOf(a.t));
 

@@ -5,12 +5,15 @@ interface JoystickProps {
   onMoveDir: (dir: number) => void;
   onJump: () => void;
   size?: number;
+  // Extra invisible touch area around the visible base, in px — a thumb
+  // that lands just outside the ring still grabs the stick.
+  hitPad?: number;
 }
 
 // A thumb joystick: tilt left/right to move (further = faster, fed into the
 // physics loop), push up to jump. Reports a continuous direction and zeroes it
 // on release so the fighter coasts to a stop.
-export default function Joystick({ onMoveDir, onJump, size = 128 }: JoystickProps) {
+export default function Joystick({ onMoveDir, onJump, size = 128, hitPad = 0 }: JoystickProps) {
   const baseRef = React.useRef<HTMLDivElement>(null);
   const [knob, setKnob] = React.useState({ x: 0, y: 0 });
   const [active, setActive] = React.useState(false);
@@ -72,31 +75,38 @@ export default function Joystick({ onMoveDir, onJump, size = 128 }: JoystickProp
 
   return (
     <div
-      ref={baseRef}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={reset}
       onPointerCancel={reset}
       onLostPointerCapture={reset}
-      className="relative rounded-full bg-gray-800/40 border border-white/10 backdrop-blur-sm touch-none select-none"
-      style={{ width: size, height: size }}
+      className="touch-none select-none"
+      // Negative margin cancels the padding, so the bigger hit area doesn't
+      // shift the visible stick.
+      style={{ padding: hitPad, margin: -hitPad }}
       aria-label="Movement joystick"
     >
-      {/* subtle directional hints */}
-      <span className="absolute inset-x-0 top-1 text-center text-white/25 text-xs pointer-events-none">↑</span>
-      <span className="absolute inset-y-0 left-1.5 flex items-center text-white/25 text-xs pointer-events-none">←</span>
-      <span className="absolute inset-y-0 right-1.5 flex items-center text-white/25 text-xs pointer-events-none">→</span>
       <div
-        className="absolute rounded-full bg-gray-200/90 shadow-lg shadow-black/40"
-        style={{
-          width: size * 0.46,
-          height: size * 0.46,
-          left: '50%',
-          top: '50%',
-          transform: `translate(calc(-50% + ${knob.x}px), calc(-50% + ${knob.y}px))`,
-          transition: active ? 'none' : 'transform 0.14s ease-out',
-        }}
-      />
+        ref={baseRef}
+        className="relative rounded-full bg-gray-800/40 border border-white/10 backdrop-blur-sm"
+        style={{ width: size, height: size }}
+      >
+        {/* subtle directional hints */}
+        <span className="absolute inset-x-0 top-1 text-center text-white/25 text-xs pointer-events-none">↑</span>
+        <span className="absolute inset-y-0 left-1.5 flex items-center text-white/25 text-xs pointer-events-none">←</span>
+        <span className="absolute inset-y-0 right-1.5 flex items-center text-white/25 text-xs pointer-events-none">→</span>
+        <div
+          className="absolute rounded-full bg-gray-200/90 shadow-lg shadow-black/40"
+          style={{
+            width: size * 0.46,
+            height: size * 0.46,
+            left: '50%',
+            top: '50%',
+            transform: `translate(calc(-50% + ${knob.x}px), calc(-50% + ${knob.y}px))`,
+            transition: active ? 'none' : 'transform 0.14s ease-out',
+          }}
+        />
+      </div>
     </div>
   );
 }
