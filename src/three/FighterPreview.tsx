@@ -57,7 +57,9 @@ function Showcase({ character }: { character: Character }) {
       <hemisphereLight args={['#ffffff', '#1a1026', 1.1]} />
       <directionalLight position={[3, 6, 6]} intensity={1.4} />
       <pointLight position={[-2.5, 2.5, -1.5]} intensity={18} distance={10} color={accent} />
-      <sprite position={[0, 1.3, -2.5]} scale={[7, 7, 1]}>
+      {/* Kept small enough to fade out before the canvas edges, so it never
+          shows as a hard-edged box. */}
+      <sprite position={[0, 1.3, -2.5]} scale={[4.2, 4.2, 1]}>
         <spriteMaterial map={glowTexture()} color={accent} transparent opacity={0.35} depthWrite={false} blending={THREE.AdditiveBlending} />
       </sprite>
       <group ref={turntable}>
@@ -85,7 +87,7 @@ function PreviewCamera() {
   const { camera, size } = useThree();
   React.useEffect(() => {
     const aspect = size.width / Math.max(1, size.height);
-    const back = Math.max(1, 0.72 / aspect);
+    const back = Math.max(1, 0.95 / aspect);
     camera.position.set(0, 1.9 * back, 6.6 * back);
     camera.lookAt(0, 1.05, 0);
   }, [camera, size.width, size.height]);
