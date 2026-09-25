@@ -12,10 +12,13 @@ import { ArenaHud } from '../components/ArenaHud';
 import ArenaScene from '../three/ArenaScene';
 import SettingsPanel from '../components/SettingsPanel';
 import { useSettings } from '../store/settingsStore';
+import { enterFullscreen, exitFullscreen } from '../lib/fullscreen';
 import { specialStyleOf } from '../three/specialStyles';
 
 export default function GameArena() {
   const navigate = useNavigate();
+  // Fullscreen is for fights only: leaving the arena brings the browser bar back.
+  useEffect(() => () => exitFullscreen(), []);
   const winSound = useRef<UIFx>();
   const loseSound = useRef<UIFx>();
 
@@ -417,7 +420,10 @@ export default function GameArena() {
                 <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-center sm:items-stretch">
                   <div className="flex flex-col gap-3 w-48">
                     <button
-                      onClick={resumeGame}
+                      onClick={() => {
+                        if (useSettings.getState().fullscreen) enterFullscreen();
+                        resumeGame();
+                      }}
                       className="px-6 py-3 bg-green-500 rounded-lg flex items-center justify-center gap-2"
                     >
                       <Play size={20} />
@@ -446,7 +452,10 @@ export default function GameArena() {
               )}
               {gameStatus === 'won' && (
                 <button
-                  onClick={() => advanceGauntlet()}
+                  onClick={() => {
+                    if (useSettings.getState().fullscreen) enterFullscreen();
+                    advanceGauntlet();
+                  }}
                   className="px-6 py-3 bg-gradient-to-r from-red-600 to-orange-500 rounded-lg font-bold
                            flex justify-center items-center gap-2 active:brightness-110"
                 >

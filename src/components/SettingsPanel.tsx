@@ -1,4 +1,6 @@
-import { Music, Volume2 } from 'lucide-react';
+import React from 'react';
+import { Maximize, Music, Volume2 } from 'lucide-react';
+import { enterFullscreen, exitFullscreen, fullscreenSupported, isFullscreen, onFullscreenChange } from '../lib/fullscreen';
 import { useSettings } from '../store/settingsStore';
 
 function Toggle({ label, icon, on, onChange }: { label: string; icon: React.ReactNode; on: boolean; onChange: (on: boolean) => void }) {
@@ -24,14 +26,31 @@ function Toggle({ label, icon, on, onChange }: { label: string; icon: React.Reac
   );
 }
 
-// Audio settings, shown in the pause menu. Choices are remembered on the device.
+// Audio and display settings, shown in the pause menu. Choices are
+// remembered on the device.
 export default function SettingsPanel() {
-  const { music, sfx, setMusic, setSfx } = useSettings();
+  const { music, sfx, setMusic, setSfx, setFullscreen } = useSettings();
+  // The switch shows the real state, since the player can also leave
+  // fullscreen with the system back / swipe gesture or Esc.
+  const [full, setFull] = React.useState(isFullscreen);
+  React.useEffect(() => onFullscreenChange(() => setFull(isFullscreen())), []);
   return (
     <div className="w-56 rounded-xl border border-white/10 bg-gray-900/80 backdrop-blur-sm p-2">
       <div className="px-3 pt-1 pb-1.5 text-[10px] tracking-[0.2em] uppercase text-gray-400 text-left">Settings</div>
       <Toggle label="Music" icon={<Music size={18} />} on={music} onChange={setMusic} />
       <Toggle label="Sound effects" icon={<Volume2 size={18} />} on={sfx} onChange={setSfx} />
+      {fullscreenSupported() && (
+        <Toggle
+          label="Full screen"
+          icon={<Maximize size={18} />}
+          on={full}
+          onChange={(on) => {
+            setFullscreen(on);
+            if (on) enterFullscreen();
+            else exitFullscreen();
+          }}
+        />
+      )}
     </div>
   );
 }

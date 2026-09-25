@@ -9,6 +9,7 @@ import { Swords, Sparkles, ArrowLeft, ChevronRight } from 'lucide-react';
 import { Character } from '../types/game';
 import { accentOf } from '../data/accents';
 import FighterPreview from '../three/FighterPreview';
+import { enterFullscreen } from '../lib/fullscreen';
 import { useSettings } from '../store/settingsStore';
 
 
@@ -111,6 +112,8 @@ export default function CharacterSelect() {
   const handleFight = () => {
     ReactGA.event({ category: 'Game', action: 'Fight Started', label: selected.name });
     startGauntlet(selected);
+    // Hide the browser bar for the fight (needs this tap to be allowed).
+    if (useSettings.getState().fullscreen) enterFullscreen();
     navigate('/arena');
   };
 
