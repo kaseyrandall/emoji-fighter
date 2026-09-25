@@ -18,6 +18,36 @@ interface ArenaHudProps {
   onPause: () => void;
 }
 
+// Health status colours, shared by both fighters: the bar shifts from green
+// to yellow, orange and finally a pulsing red as it drains.
+const healthColor = (pct: number) =>
+  pct > 60 ? '#22c55e' : pct > 30 ? '#facc15' : pct > 15 ? '#f97316' : '#ef4444';
+
+// One health bar. Both are pinned to the timer (`anchor` is the side facing
+// it) and drain toward it; the colour fades between status stages.
+function HealthBar({ value, anchor }: { value: number; anchor: 'left' | 'right' }) {
+  const pct = Math.max(0, Math.min(100, value));
+  const critical = pct > 0 && pct <= 15;
+  return (
+    <div
+      className={`h-2.5 sm:h-3.5 bg-gray-800/80 rounded-full overflow-hidden border border-black/40 flex ${
+        anchor === 'right' ? 'justify-end' : 'justify-start'
+      }`}
+    >
+      <div
+        className={`h-full ${critical ? 'animate-pulse' : ''}`}
+        style={{
+          width: `${pct}%`,
+          backgroundColor: healthColor(pct),
+          // A soft top highlight gives the bar a little depth.
+          backgroundImage: 'linear-gradient(to bottom, rgba(255,255,255,0.35), rgba(255,255,255,0) 55%)',
+          transition: 'width 300ms ease-out, background-color 400ms ease',
+        }}
+      />
+    </div>
+  );
+}
+
 // Top HUD — corner portraits, full-width health bars meeting a central
 // round/timer badge (MK-style). Memoized so the ~30 HUD nodes aren't
 // reconciled on every 60fps movement frame; it only re-renders when one of
@@ -59,10 +89,7 @@ function ArenaHudBase({
             ))}
           </div>
         </div>
-        {/* Both health bars are pinned to the timer and drain toward it. */}
-        <div className="h-2.5 sm:h-3.5 bg-gray-800/80 rounded-full overflow-hidden border border-black/40 flex justify-end">
-          <div className="h-full bg-gradient-to-l from-green-400 to-green-500 transition-all duration-300" style={{ width: `${playerHealth}%` }} />
-        </div>
+        <HealthBar value={playerHealth} anchor="right" />
         {/* super meter (charged by landing attacks) */}
         <div className="mt-1 h-1.5 bg-gray-800/70 rounded-full overflow-hidden">
           <div
@@ -106,9 +133,7 @@ function ArenaHudBase({
           </div>
           <span className="truncate text-[10px] sm:text-xs font-semibold text-right ml-auto">{opponent.name}</span>
         </div>
-        <div className="h-2.5 sm:h-3.5 bg-gray-800/80 rounded-full overflow-hidden border border-black/40">
-          <div className="h-full bg-gradient-to-r from-red-400 to-red-500 transition-all duration-300" style={{ width: `${opponentHealth}%` }} />
-        </div>
+        <HealthBar value={opponentHealth} anchor="left" />
       </div>
 
       {/* Opponent portrait */}
