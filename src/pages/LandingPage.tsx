@@ -30,12 +30,12 @@ export default function LandingPage() {
       <main className="relative z-10 flex-1 min-h-0 flex flex-col items-center justify-center px-4 text-center">
         <Swords className="w-11 h-11 lg:w-16 lg:h-16 text-yellow-500 mb-3 lg:mb-5" />
         {/* Title stays on one line and scales with a narrow (portrait) screen;
-            the "3D" badge is anchored to the end of the text, not the page. */}
-        <h1 className="whitespace-nowrap text-[clamp(1.25rem,6.2vw,2.25rem)] sm:text-4xl lg:text-6xl font-bold mb-1.5 lg:mb-3 drop-shadow-[0_4px_18px_rgba(0,0,0,0.9)]">
+            the "3D" badge sits just past the end of the text (clear of the "r"). */}
+        <h1 className="whitespace-nowrap text-[clamp(1.25rem,5.6vw,2.25rem)] sm:text-4xl lg:text-6xl font-bold mb-1.5 lg:mb-3 drop-shadow-[0_4px_18px_rgba(0,0,0,0.9)]">
           <span className="relative inline-block">
             Emoji Fighter
             <span
-              className="absolute -top-[0.75em] -right-[0.7em] rotate-12 rounded-md px-1.5 py-0.5 lg:px-2 lg:py-1
+              className="absolute -top-[0.6em] left-full ml-[0.1em] rotate-12 rounded-md px-1.5 py-0.5 lg:px-2 lg:py-1
                        text-[0.4em] leading-none font-black text-black bg-gradient-to-br from-yellow-300 to-orange-500
                        shadow-[0_0_18px_rgba(245,158,11,0.7)] border-2 border-black/60"
             >

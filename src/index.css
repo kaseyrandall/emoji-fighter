@@ -81,9 +81,16 @@
      and hide them only on true mouse/desktop pointers, which play by keyboard.
      The old `lg:hidden` keyed off width, so an iPad Pro in landscape (≥1024px)
      lost its controls entirely. */
+  /* Desktop-only UI (keyboard hints) is the mirror image: shown only there. */
+  .desktop-only {
+    display: none;
+  }
   @media (hover: hover) and (pointer: fine) {
     .game-controls {
       display: none;
+    }
+    .desktop-only {
+      display: flex;
     }
   }
   .move-button {

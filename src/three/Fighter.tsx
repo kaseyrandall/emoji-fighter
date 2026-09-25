@@ -131,7 +131,10 @@ export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 
     // Follow the simulation smoothly (it ticks at a fixed rate; we render at
     // whatever the display runs at).
     a.x = damp(a.x, inp.x, 22, rawDt);
-    a.y = damp(a.y, inp.y, 30, rawDt);
+    // A fighter KO'd in mid-air (the round ends and freezes the jump) drops
+    // to the floor as it topples, instead of lying flat in the air.
+    if (inp.pose === 'ko') a.y = damp(a.y, 0, 7, dt);
+    else a.y = damp(a.y, inp.y, 30, rawDt);
     const targetYaw = inp.facing === 1 ? Math.PI + 0.3 : -0.3;
     a.yaw = damp(a.yaw, targetYaw, 20, dt);
     // KO fall: a timed drop that lands with a little bounce; standing back

@@ -11,6 +11,7 @@ import Credits from '../components/Credits';
 import { ArenaHud } from '../components/ArenaHud';
 import ArenaScene from '../three/ArenaScene';
 import PauseMenu from '../components/PauseMenu';
+import KeyHints from '../components/KeyHints';
 import { useSettings } from '../store/settingsStore';
 import { playStageMusic, stopMusic } from '../audio/music';
 import { enterFullscreen } from '../lib/fullscreen';
@@ -156,10 +157,24 @@ export default function GameArena() {
   }, [gameStatus]);
 
   useEffect(() => {
+    // Which movement keys are down, so letting go of one while the other is
+    // still held keeps you moving that way.
+    const held = new Set<string>();
+    const syncMove = () => setMoveDir(held.has('a') === held.has('d') ? 0 : held.has('a') ? -1 : 1);
+
     const handleKeyDown = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      // Space / P / Esc toggle the pause menu (and resume from it).
+      if (key === ' ' || key === 'p' || key === 'escape') {
+        if (gameStatus === 'playing' || gameStatus === 'paused') {
+          e.preventDefault();
+          togglePause();
+        }
+        return;
+      }
       if (gameStatus !== 'playing') return;
 
-      switch (e.key.toLowerCase()) {
+      switch (key) {
         case 'j':
           performMove('punch');
           playMoveSound('punch');
@@ -172,23 +187,22 @@ export default function GameArena() {
           fireSpecial();
           break;
         case 'a':
-          setMoveDir(-1);
-          break;
         case 'd':
-          setMoveDir(1);
+          held.add(key);
+          syncMove();
           break;
         case 'w':
-          performMove('jump');
-          break;
-        case ' ':
-          togglePause();
+          if (!e.repeat) performMove('jump');
           break;
       }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
-      if (k === 'a' || k === 'd') setMoveDir(0);
+      if (k === 'a' || k === 'd') {
+        held.delete(k);
+        syncMove();
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -448,6 +462,13 @@ export default function GameArena() {
 
       {/* Controls — kept mounted across the round countdown too, so a joystick
           held through a KO doesn't lose the still-down finger on the next round. */}
+      {/* Keyboard hints along the bottom on desktop (no touch controls there). */}
+      {(gameStatus === 'ready' || gameStatus === 'playing') && (
+        <div className="desktop-only fixed bottom-3 left-1/2 -translate-x-1/2 z-10 px-4 py-2 rounded-xl bg-black/45 backdrop-blur-sm border border-white/10 pointer-events-none">
+          <KeyHints />
+        </div>
+      )}
+
       {(gameStatus === 'ready' || gameStatus === 'playing') && (
         <div className="game-controls items-end">
           {/* Movement joystick */}
