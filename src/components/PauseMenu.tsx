@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Info, LogOut, Maximize, Music, Play, Swords, Volume2 } from 'lucide-react';
 import { Character } from '../types/game';
 import { useSettings } from '../store/settingsStore';
+import KeyHints from './KeyHints';
 import { enterFullscreen, exitFullscreen, fullscreenSupported, isFullscreen, onFullscreenChange } from '../lib/fullscreen';
 
 // A settings tile: icon over a label, lit up when on, with a status dot in
@@ -160,6 +161,12 @@ export default function PauseMenu({ player, opponent, fight, totalFights, round,
             )}
           </div>
         </div>
+      </div>
+
+      {/* Keyboard controls, desktop only */}
+      <div className="desktop-only flex-col items-center gap-2 mt-4 pt-4 lg:mt-6 lg:pt-5 border-t border-white/10">
+        <span className="text-[9px] tracking-[0.2em] text-gray-500">KEYBOARD</span>
+        <KeyHints />
       </div>
     </motion.div>
   );
