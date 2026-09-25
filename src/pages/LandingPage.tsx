@@ -6,6 +6,13 @@ import { Swords, Info, History } from 'lucide-react';
 import Credits from '../components/Credits';
 import LandingScene from '../three/LandingScene';
 
+// Secondary home-page buttons: same height as each other (48px), outlined so
+// Play Now stays the clear primary action.
+const SECONDARY_BUTTON =
+  'h-12 w-full inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/5 ' +
+  'text-xs sm:text-sm font-semibold text-gray-200 whitespace-nowrap hover:bg-white/10 hover:text-white ' +
+  'transition-colors active:scale-95 backdrop-blur-sm';
+
 export default function LandingPage() {
   const navigate = useNavigate();
   const [showCredits, setShowCredits] = React.useState(false);
@@ -33,7 +40,10 @@ export default function LandingPage() {
           </span>
         </h1>
         <p className="text-[clamp(0.6rem,3.1vw,0.875rem)] sm:text-sm lg:text-xl mb-5 lg:mb-8 text-gray-300">Battle with emoji warriors!</p>
-        <div className="flex flex-col items-center gap-2 lg:gap-3">
+        {/* Menu: one consistent button system. Every button is 48px+ tall
+            (a comfortable thumb target) with 12px between them; Play Now is
+            full width, the two secondary actions split the row below it. */}
+        <div className="w-72 max-w-[85vw] lg:w-80 flex flex-col gap-3">
           <button
             onClick={() => {
               ReactGA.event({
@@ -43,28 +53,22 @@ export default function LandingPage() {
               });
               navigate('/select');
             }}
-            className="px-8 py-3 lg:py-4 bg-yellow-500 text-black rounded-lg text-lg lg:text-xl font-bold
-                     hover:bg-yellow-400 transition-colors shadow-lg
-                     active:transform active:scale-95"
+            className="h-14 lg:h-16 w-full bg-yellow-500 text-black rounded-xl text-lg lg:text-xl font-bold
+                     hover:bg-yellow-400 transition-colors shadow-lg active:scale-95"
           >
             Play Now
           </button>
-          <div className="flex items-center justify-center gap-1 whitespace-nowrap">
+          <div className="grid grid-cols-2 gap-3">
             {/* The original 2D game, kept playable as a static build at /classic/ */}
             <a
               href="/classic/"
               onClick={() => ReactGA.event({ category: 'Game', action: 'Open Classic', label: 'Landing Page' })}
-              className="inline-flex items-center gap-1.5 px-2 sm:px-4 py-1.5 text-gray-300 hover:text-white
-                       transition-colors text-xs sm:text-sm font-semibold"
+              className={SECONDARY_BUTTON}
             >
               <History size={16} className="shrink-0" />
-              Classic version
+              Classic
             </a>
-            <button
-              onClick={() => setShowCredits(true)}
-              className="inline-flex items-center gap-1.5 px-2 sm:px-4 py-1.5 text-gray-300 hover:text-white
-                       transition-colors text-xs sm:text-sm font-semibold"
-            >
+            <button onClick={() => setShowCredits(true)} className={SECONDARY_BUTTON}>
               <Info size={16} className="shrink-0" />
               Credits
             </button>
