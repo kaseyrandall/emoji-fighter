@@ -5,12 +5,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import UIFx from 'uifx';
 import { useShallow } from 'zustand/react/shallow';
 import { useGameStore } from '../store/gameStore';
-import { Play, RotateCcw, Swords, Info } from 'lucide-react';
+import { RotateCcw, Swords } from 'lucide-react';
 import Joystick from '../components/Joystick';
 import Credits from '../components/Credits';
 import { ArenaHud } from '../components/ArenaHud';
 import ArenaScene from '../three/ArenaScene';
-import SettingsPanel from '../components/SettingsPanel';
+import PauseMenu from '../components/PauseMenu';
 import { useSettings } from '../store/settingsStore';
 import { enterFullscreen, exitFullscreen } from '../lib/fullscreen';
 import { specialStyleOf } from '../three/specialStyles';
@@ -362,7 +362,7 @@ export default function GameArena() {
       {/* Game Status Overlay */}
       {(gameStatus === 'ready' || gameStatus === 'paused' || gameStatus === 'won' || gameStatus === 'lost' || gameStatus === 'champion') && (
         // Covers the controls too, so they can't be used during the countdown.
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-10">
+        <div className={`fixed inset-0 flex items-center justify-center z-10 ${gameStatus === 'paused' ? 'bg-black/60 backdrop-blur-[2px]' : 'bg-black/40'}`}>
           <div className="text-center relative">
             {gameStatus === 'ready' && countdown > 0 && (
               <motion.h2
@@ -383,9 +383,6 @@ export default function GameArena() {
               >
                 FIGHT!
               </motion.h2>
-            )}
-            {gameStatus === 'paused' && (
-              <h2 className="text-3xl mb-3 text-white">PAUSED</h2>
             )}
             {(gameStatus === 'won' || gameStatus === 'lost' || gameStatus === 'champion') && (
               <h2 className="flex flex-col mb-4">
@@ -415,40 +412,23 @@ export default function GameArena() {
               </h2>
             )}
             <div className="flex flex-col gap-3 lg:gap-4 justify-center">
-              {gameStatus === 'paused' && (
-                // Menu buttons beside the settings list (stacked on narrow screens).
-                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-center sm:items-stretch">
-                  <div className="flex flex-col gap-3 w-48">
-                    <button
-                      onClick={() => {
-                        if (useSettings.getState().fullscreen) enterFullscreen();
-                        resumeGame();
-                      }}
-                      className="px-6 py-3 bg-green-500 rounded-lg flex items-center justify-center gap-2"
-                    >
-                      <Play size={20} />
-                      Resume
-                    </button>
-                    <button
-                      onClick={() => {
-                        resetGame();
-                        navigate('/select');
-                      }}
-                      className="px-6 py-3 bg-red-500 rounded-lg flex items-center justify-center gap-2"
-                    >
-                      <RotateCcw size={20} />
-                      Quit
-                    </button>
-                    <button
-                      onClick={() => setShowCredits(true)}
-                      className="px-6 py-2 text-gray-300 hover:text-white transition-colors flex items-center justify-center gap-2 text-sm font-semibold"
-                    >
-                      <Info size={16} />
-                      Credits
-                    </button>
-                  </div>
-                  <SettingsPanel />
-                </div>
+              {gameStatus === 'paused' && selectedCharacter && opponent && (
+                <PauseMenu
+                  player={selectedCharacter}
+                  opponent={opponent}
+                  fight={gauntletStage + 1}
+                  totalFights={gauntletOpponents.length}
+                  round={round}
+                  onResume={() => {
+                    if (useSettings.getState().fullscreen) enterFullscreen();
+                    resumeGame();
+                  }}
+                  onQuit={() => {
+                    resetGame();
+                    navigate('/select');
+                  }}
+                  onCredits={() => setShowCredits(true)}
+                />
               )}
               {gameStatus === 'won' && (
                 <button
