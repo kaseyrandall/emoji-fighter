@@ -12,6 +12,7 @@ import { ArenaHud } from '../components/ArenaHud';
 import ArenaScene from '../three/ArenaScene';
 import PauseMenu from '../components/PauseMenu';
 import { useSettings } from '../store/settingsStore';
+import { playStageMusic, stopMusic } from '../audio/music';
 import { enterFullscreen, exitFullscreen } from '../lib/fullscreen';
 import { specialStyleOf } from '../three/specialStyles';
 
@@ -84,7 +85,6 @@ export default function GameArena() {
 
   const [castFlash, setCastFlash] = useState(false);
   const [showCredits, setShowCredits] = useState(false);
-  const bgmRef = useRef<HTMLAudioElement | null>(null);
 
   // Brief wash in the fighter's special colour when they cast their super
   // (the 3D scene handles the rings / sparks / camera punch-in). Keyed to the
@@ -111,28 +111,16 @@ export default function GameArena() {
       return;
     }
 
-    // Background music (started / stopped by the Music setting below).
-    const bgm = new Audio('/assets/fight-bgm.wav');
-    bgm.loop = true;
-    bgm.volume = 0.3;
-    bgmRef.current = bgm;
-    if (useSettings.getState().music) bgm.play().catch(() => {});
-
-    return () => {
-      bgm.pause();
-      bgm.currentTime = 0;
-      bgmRef.current = null;
-    };
+    // Each stage has its own theme (src/audio/music.ts), which follows the
+    // Music setting by itself; it stops when leaving the arena.
+    return () => stopMusic();
   }, []);
 
-  // Music on/off from the pause menu's settings.
-  const musicOn = useSettings((s) => s.music);
+  // Switch themes when the next fight moves to a new stage.
+  const currentStage = useGameStore((s) => s.currentStage);
   useEffect(() => {
-    const bgm = bgmRef.current;
-    if (!bgm) return;
-    if (musicOn) bgm.play().catch(() => {});
-    else bgm.pause();
-  }, [musicOn]);
+    if (selectedCharacter && opponent) playStageMusic(currentStage);
+  }, [currentStage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-pause when the tab/app is backgrounded: stops the loops (saving CPU
   // and battery) and keeps the player from being KO'd while they're away.

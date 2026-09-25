@@ -19,7 +19,8 @@ npm run dev
   - `Vfx.tsx`: pooled sparks, shockwave rings, damage numbers and per-character special effects.
   - `LandingScene.tsx` / `FighterPreview.tsx`: the 3D title screen and the character-select turntable.
 - HUD, menus and touch controls stay as React DOM layered over the canvas.
+- `src/audio/`: all sound is synthesized with Web Audio, so none of it is downloaded. `sfx.ts` has the hits and one recipe per special; `music.ts` is a small step sequencer with an original theme for each stage.
 
 ## Classic (2D) version
 
-The original 2D game stays playable at `/classic/` (linked from the home page). It's a prebuilt static copy in `public/classic/`, built from `main` at commit `95382f3` (the last 2D release) with `base: '/classic/'`, plus a "Play the new 3D version" button on its home page. It ships its own copies of the sounds the 3D game dropped (`public/classic/assets/*.wav`) and loads the stage art, fight music and select sound from the shared `public/assets/`, so keep those files in place.
+The original 2D game stays playable at `/classic/` (linked from the home page). It's a prebuilt static copy in `public/classic/`, built from `main` at commit `95382f3` (the last 2D release) with `base: '/classic/'`, plus a "Play the new 3D version" button on its home page. It ships its own copies of the sounds the 3D game dropped (`public/classic/assets/*.wav`) and loads the stage art, fight music (`fight-bgm.wav`, now only used by the classic game) and select sound from the shared `public/assets/`, so keep those files in place.

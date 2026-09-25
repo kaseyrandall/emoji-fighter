@@ -10,6 +10,7 @@ const enabled = () => useSettings.getState().sfx;
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
 let noise: AudioBuffer | null = null;
+let bus: AudioNode | null = null; // the shared compressor, for the music too
 
 // Browsers (iOS especially) only let audio start inside a user gesture, so
 // the context is created / resumed on the first touch or key press.
@@ -35,11 +36,19 @@ function audio(): AudioContext | null {
   master = ctx.createGain();
   master.gain.value = 0.55;
   master.connect(comp).connect(ctx.destination);
+  bus = comp;
   const len = ctx.sampleRate;
   noise = ctx.createBuffer(1, len, ctx.sampleRate);
   const d = noise.getChannelData(0);
   for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
   return ctx;
+}
+
+// The audio context, the output the music plays into, and a noise buffer,
+// shared with the music sequencer (src/audio/music.ts).
+export function audioOut(): { ctx: AudioContext; out: AudioNode; noise: AudioBuffer } | null {
+  const c = audio();
+  return c && bus && noise ? { ctx: c, out: bus, noise } : null;
 }
 
 // A quick attack / exponential decay envelope on a gain node.

@@ -61,8 +61,14 @@
   .game-controls {
     @apply fixed bottom-0 left-0 right-0 flex justify-between items-center;
     padding-bottom: calc(0.375rem + env(safe-area-inset-bottom));
-    padding-left: calc(1.25rem + env(safe-area-inset-left));
-    padding-right: calc(1rem + env(safe-area-inset-right));
+    /* The same gap on both sides. Phones report the camera cutout as a safe
+       area on one side only (the Pixel's is mid-left in landscape, well above
+       the joystick), which pushed the joystick in and left the buttons hard
+       against the other edge. Half the larger inset clears rounded corners
+       without the lopsided look. */
+    --controls-side: calc(1.5rem + max(env(safe-area-inset-left), env(safe-area-inset-right)) * 0.5);
+    padding-left: var(--controls-side);
+    padding-right: var(--controls-side);
   }
   /* An invisible halo that extends a button's touch target past its edge. */
   .touch-pad::after {
