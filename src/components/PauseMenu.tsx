@@ -20,7 +20,7 @@ function SettingTile({ label, icon, on, onChange }: { label: string; icon: React
     >
       <span className={`absolute top-2 right-2 w-1.5 h-1.5 rounded-full ${on ? 'bg-green-400' : 'bg-gray-600'}`} />
       {icon}
-      <span className="text-[9px] font-semibold whitespace-nowrap">{label}</span>
+      <span className="text-[10px] font-semibold whitespace-nowrap">{label}</span>
     </button>
   );
 }
@@ -51,7 +51,7 @@ export default function PauseMenu({ player, opponent, fight, totalFights, round,
       initial={{ opacity: 0, scale: 0.94, y: 8 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       transition={{ type: 'spring', stiffness: 380, damping: 28 }}
-      className="w-[24rem] max-w-[92vw] rounded-2xl border border-white/10 bg-gray-950/85 backdrop-blur-md shadow-2xl p-4 sm:p-5 text-left"
+      className="w-[28rem] max-w-[92vw] rounded-2xl border border-white/10 bg-gray-950/85 backdrop-blur-md shadow-2xl p-4 sm:p-5 text-left"
     >
       {/* Header: title + where you are in the gauntlet */}
       <div className="flex items-center justify-between gap-3 mb-4">
