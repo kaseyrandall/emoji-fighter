@@ -272,7 +272,7 @@ function EventFx({ fx, vfx }: { fx: React.MutableRefObject<FxState>; vfx: React.
       }
       if (h.result === 'blocked') {
         // Guarded: a cool spray off the raised gloves, chip damage in the callout.
-        v.set(target.x + side * 0.75, target.y + 1.25, 0.5);
+        v.set(target.x + side * 0.75, target.y + 1.05, 0.5);
         api.burst(v, '#7dd3fc', special ? 30 : 16, 4.5);
         api.ring(v, '#bae6fd', special ? 1.4 : 0.8, 0.22);
         v.set(target.x + side * -0.35, target.y + 2.1, 0.6);
@@ -282,7 +282,7 @@ function EventFx({ fx, vfx }: { fx: React.MutableRefObject<FxState>; vfx: React.
         f.hitstop = 0.035;
         return;
       }
-      v.set(target.x + side * 0.55, target.y + (h.move === 'heavy' ? 1.45 : 1.15), 0.4);
+      v.set(target.x + side * 0.55, target.y + (h.move === 'heavy' ? 1.3 : 0.95), 0.4);
       // A special's impact sparks take the attacker's special colour.
       const attacker = h.target === 'player' ? s.opponent : s.selectedCharacter;
       const color = special

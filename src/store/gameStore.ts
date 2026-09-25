@@ -29,6 +29,11 @@ let aiLastCrossAt = 0;
 // An in-progress AI cross-up: the opponent jumps over the player to land at
 // `target`, drifting `step` units per movement tick while airborne.
 let oppCross: { target: number; step: number } | undefined;
+// Set when the AI decides to back away from the player's special wind-up.
+let oppRetreatUntil = 0;
+// The AI plants its feet while its own special winds up (so the player can
+// get away from it).
+let oppPlantedUntil = 0;
 
 // Single-instance loop handles so a new round never leaves an old loop running
 // (leaked loops would fight over movement and appear to "break" the controls).
@@ -51,6 +56,8 @@ const clearRoundLoops = () => {
   if (playerJumpLoop) { clearInterval(playerJumpLoop); playerJumpLoop = undefined; }
   if (oppJumpLoop) { clearInterval(oppJumpLoop); oppJumpLoop = undefined; }
   oppCross = undefined;
+  oppRetreatUntil = 0;
+  oppPlantedUntil = 0;
   if (oppGuardTimeout) { clearTimeout(oppGuardTimeout); oppGuardTimeout = undefined; }
   pendingHits.forEach(clearTimeout);
   pendingHits.clear();
@@ -64,14 +71,17 @@ const PLAYER_ATTACK_COOLDOWN = 340;
 // uppercut's impact frame) and a long recovery that leaves you open.
 const HEAVY_ATTACK_COOLDOWN = 700;
 const HEAVY_STARTUP_MS = 300;
-// Delayed hits (the heavy's wind-up) in flight; cancelled when a round ends.
+// The special spins up before it connects (the 3D thrust lands about 0.3s
+// in), which gives the target a window to back out of range.
+const SPECIAL_STARTUP_MS = 300;
+// Delayed hits (heavy / special wind-ups) in flight; cancelled when a round ends.
 const pendingHits = new Set<ReturnType<typeof setTimeout>>();
 const afterStartup = (move: AttackMove, land: () => void) => {
-  if (move !== 'heavy') return land();
+  if (move === 'punch') return land();
   const t = setTimeout(() => {
     pendingHits.delete(t);
     if (useGameStore.getState().gameStatus === 'playing') land();
-  }, HEAVY_STARTUP_MS);
+  }, move === 'heavy' ? HEAVY_STARTUP_MS : SPECIAL_STARTUP_MS);
   pendingHits.add(t);
 };
 let playerLastAttackAt = 0;
@@ -88,7 +98,9 @@ const MIN_SEPARATION = 11;
 // fighters can cross over), staying inside the arena.
 const knockAway = (victim: number, attacker: number, amount: number) =>
   Math.max(POS_MIN, Math.min(POS_MAX, victim + (Math.sign(victim - attacker) || 1) * amount));
-const SPECIAL_RANGE = 19;
+// Checked when the special connects, not when it's thrown: a target that
+// backs off during the wind-up escapes it.
+const SPECIAL_RANGE = 20;
 
 // Super meter: landing punches charges it; the special can only fire when
 // it's full, then it's spent. A full-meter special hits harder than a raw one.
@@ -193,6 +205,8 @@ const AI_SWING_MS = 280; // the AI can't guard this soon after throwing an attac
 // How often the AI answers a jumping player with the anti-air uppercut.
 // Once its meter is full, the odds the AI cashes it in on a given attack.
 const aiSpecialChance = (stage: number) => Math.max(0.35, Math.min(0.85, 0.35 + stage * 0.1));
+// Chance the AI reads the player's special wind-up and backs out of range.
+const aiEvadeChance = (stage: number) => Math.max(0.1, Math.min(0.55, 0.15 + stage * 0.08));
 const aiAntiAirChance = (stage: number) => Math.max(0.2, Math.min(0.75, 0.3 + stage * 0.09));
 
 // The opponent's jump arc, and how many 16ms ticks it spends in the air.
@@ -486,11 +500,19 @@ export const useGameStore = create<GameStore>((set) => ({
     set({ isAttacking: true, currentMove: 'special', specialMeter: 0, playerAttackSeq: state.playerAttackSeq + 1 });
     endAttackLater(useGameStore.getState().playerAttackSeq);
 
-    const distance = Math.abs(state.playerPosition - state.opponentPosition);
-    if (distance > SPECIAL_RANGE) return;
+    // Sometimes the AI sees it coming and backs off during the wind-up.
+    const stage = state.gauntletStage + DIFF_OFFSET[state.difficulty];
+    if (state.opponentY < 1 && Math.random() < aiEvadeChance(stage)) oppRetreatUntil = now + SPECIAL_STARTUP_MS + 150;
 
-    const base = state.selectedCharacter?.moves.special || 0;
-    resolveOnOpponent('special', Math.round(base * SPECIAL_SUPER_MULT), 14);
+    afterStartup('special', () => {
+      const s = useGameStore.getState();
+      if (Math.abs(s.playerPosition - s.opponentPosition) > SPECIAL_RANGE) {
+        set({ hitEvent: { target: 'opponent', amount: 0, move: 'special', seq: nextHit(), result: 'dodged' } });
+        return;
+      }
+      const base = s.selectedCharacter?.moves.special || 0;
+      resolveOnOpponent('special', Math.round(base * SPECIAL_SUPER_MULT), 14);
+    });
   },
 
   opponentAttack: () => {
@@ -515,6 +537,7 @@ export const useGameStore = create<GameStore>((set) => ({
       // The special spends the whole meter as it's thrown, hit or miss.
       ...(randomMove === 'special' ? { opponentSpecialMeter: 0 } : {}),
     });
+    if (randomMove === 'special') oppPlantedUntil = Date.now() + SPECIAL_STARTUP_MS;
     setTimeout(() => set({ isOpponentAttacking: false }), 600);
 
     // Resolved when the blow lands (after the heavy's wind-up), against
@@ -523,7 +546,12 @@ export const useGameStore = create<GameStore>((set) => ({
       const state = useGameStore.getState();
       const special = randomMove === 'special';
       const distance = Math.abs(state.playerPosition - state.opponentPosition);
-      if (distance > (special ? SPECIAL_RANGE : HIT_RANGE)) return; // No damage if too far apart
+      if (special && distance > SPECIAL_RANGE) {
+        // The player got out of range during the wind-up.
+        set({ hitEvent: { target: 'player', amount: 0, move: 'special', seq: nextHit(), result: 'dodged' } });
+        return;
+      }
+      if (!special && distance > HIT_RANGE) return; // No damage if too far apart
 
       if (!reaches(randomMove, state.opponentY, state.playerY)) {
         set({ hitEvent: { target: 'player', amount: 0, move: randomMove, seq: nextHit(), result: 'dodged' } });
@@ -711,7 +739,11 @@ export const useGameStore = create<GameStore>((set) => ({
       if (oppCross) {
         const d = oppCross.target - oppPos;
         oppPos = Math.max(POS_MIN, Math.min(POS_MAX, oppPos + Math.sign(d) * Math.min(Math.abs(d), oppCross.step)));
-      } else if (Math.abs(pos - oppPos) > HIT_RANGE) {
+      } else if (Date.now() < oppRetreatUntil) {
+        const diff = difficultyForStage(s.gauntletStage + DIFF_OFFSET[s.difficulty]);
+        const away = Math.sign(oppPos - pos) || 1;
+        oppPos = Math.max(POS_MIN, Math.min(POS_MAX, oppPos + away * diff.moveSpeed * 1.3 * (MOVE_TICK_MS / 50)));
+      } else if (Math.abs(pos - oppPos) > HIT_RANGE && Date.now() >= oppPlantedUntil) {
         const diff = difficultyForStage(s.gauntletStage + DIFF_OFFSET[s.difficulty]);
         const oppStep = diff.moveSpeed * (MOVE_TICK_MS / 50);
         oppPos = pos < oppPos
