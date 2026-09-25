@@ -11,6 +11,30 @@ import { Fighter } from './Fighter';
 import { defaultFighterInput } from './fighterInput';
 import { glowTexture } from './textures';
 
+const BG = '#07070d';
+
+// A vertical fade from the scene's background colour (bottom, opaque) to
+// clear (top). Drawn as a plane just behind the sparring pair, it dims the
+// falling emoji as they pass behind the fighters so the pair reads cleanly.
+let fadeTex: THREE.CanvasTexture | undefined;
+function fadeTexture() {
+  if (fadeTex) return fadeTex;
+  const c = document.createElement('canvas');
+  c.width = 4;
+  c.height = 256;
+  const ctx = c.getContext('2d')!;
+  const g = ctx.createLinearGradient(0, 256, 0, 0);
+  g.addColorStop(0, 'rgba(7,7,13,1)');
+  g.addColorStop(0.45, 'rgba(7,7,13,0.92)');
+  g.addColorStop(0.75, 'rgba(7,7,13,0.5)');
+  g.addColorStop(1, 'rgba(7,7,13,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 4, 256);
+  fadeTex = new THREE.CanvasTexture(c);
+  fadeTex.colorSpace = THREE.SRGBColorSpace;
+  return fadeTex;
+}
+
 const RAIN = ['🥷', '🤖', '👽', '🐲', '💩', '👊', '🦾', '💥', '⚡️', '🔥'];
 const RAIN_COUNT = 26;
 const TOP = 11;
@@ -119,6 +143,11 @@ function Contents() {
   const pairX = portrait ? 1.3 : 5.4;
   const pairY = portrait ? -4.3 : -2.6;
   const pairScale = portrait ? 0.55 : 1;
+  // The fade band behind the pair: its top edge sits ~1 unit above the
+  // fighters' heads, and it extends well below the bottom of the view.
+  const fadeTop = pairY + 2.2 * pairScale + (portrait ? 0.9 : 1.2);
+  const fadeH = 7;
+  const fadeY = fadeTop - fadeH / 2;
   // Smaller falling emoji in the narrow portrait view.
   const dropScale = portrait ? 0.6 : 1;
   // Two different random fighters face off either side of the title.
@@ -128,8 +157,8 @@ function Contents() {
   }, []);
   return (
     <>
-      <color attach="background" args={['#07070d']} />
-      <fog attach="fog" args={['#07070d', 18, 42]} />
+      <color attach="background" args={[BG]} />
+      <fog attach="fog" args={[BG, 18, 42]} />
       <hemisphereLight args={['#ffe9c4', '#1a1030', 1.2]} />
       <directionalLight position={[5, 8, 8]} intensity={1.4} color="#fff1dd" />
       <directionalLight position={[-6, 3, -4]} intensity={1.4} color="#a855f7" />
@@ -141,6 +170,13 @@ function Contents() {
       {drops.slice(0, quality >= 2 ? RAIN_COUNT / 2 : RAIN_COUNT).map((d, i) => (
         <RainDrop key={`${spread}-${i}`} initial={d} spread={spread} sizeScale={dropScale} />
       ))}
+      {/* Fade behind the fighters (all the rain falls further back than
+          this plane; the fighters stand in front of it). It runs from below
+          the pedestals to a little above the fighters' heads. */}
+      <mesh position={[0, fadeY, -0.9]} renderOrder={-1}>
+        <planeGeometry args={[60, fadeH]} />
+        <meshBasicMaterial map={fadeTexture()} transparent depthWrite={false} fog={false} toneMapped={false} />
+      </mesh>
       <group position={[0, pairY, 0]} scale={pairScale}>
         {/* A glowing pedestal under each fighter */}
         {[-pairX / pairScale, pairX / pairScale].map((x) => (
