@@ -10,6 +10,7 @@ import { defaultFighterInput } from './fighterInput';
 import { glowTexture } from './textures';
 import { Vfx, VfxApi } from './Vfx';
 import { specialStyleOf } from './specialStyles';
+import * as sfx from '../audio/sfx';
 
 const DEMO: AttackMove[] = ['punch', 'heavy', 'punch', 'special'];
 
@@ -23,6 +24,9 @@ function Showcase({ character }: { character: Character }) {
   const clock = React.useRef({ t: 0, next: 1.1, step: 0, popT: 0 });
   const vfx = React.useRef<VfxApi>(null);
   const style = specialStyleOf(character.id);
+  // The special's sound plays with the first demo after picking a fighter
+  // (not on every loop of the turntable).
+  const heard = React.useRef('');
 
   useFrame((_, rawDt) => {
     const dt = Math.min(rawDt, 1 / 20);
@@ -40,6 +44,10 @@ function Showcase({ character }: { character: Character }) {
       if (m === 'special' && vfx.current) {
         const from = new THREE.Vector3(0, 1.05, 0.1);
         vfx.current.special(style, from, -1, new THREE.Vector3(-1.5, 1.05, 0.3));
+        if (heard.current !== character.id) {
+          heard.current = character.id;
+          sfx.special(character.id);
+        }
       }
     }
     inp.charged = DEMO[c.step % DEMO.length] === 'special';
