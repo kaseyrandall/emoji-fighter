@@ -141,7 +141,7 @@ function Contents() {
     () => Array.from({ length: RAIN_COUNT }, () => makeDrop(BOTTOM + Math.random() * (TOP - BOTTOM), spread)),
     [spread]
   );
-  const pairX = portrait ? 1.3 : 5.4;
+  const pairX = portrait ? 1.3 : 6.8;
   const pairY = portrait ? -4.3 : -2.6;
   const pairScale = portrait ? 0.55 : 1;
   // The fade band behind the pair: its top edge sits well above the

@@ -107,12 +107,17 @@ interface Difficulty {
 }
 
 const difficultyForStage = (stage: number): Difficulty => ({
-  attackChance: Math.min(0.14, 0.035 + stage * 0.02),
-  moveSpeed: Math.min(4, 2 + stage * 0.35),
-  damageMult: Math.min(1.3, 0.8 + stage * 0.09),
-  cooldownMs: Math.max(320, 850 - stage * 90),
-  reactionMs: Math.max(0, 500 - stage * 90),
+  attackChance: Math.min(0.16, 0.05 + stage * 0.022),
+  moveSpeed: Math.min(4.3, 2.3 + stage * 0.35),
+  damageMult: Math.min(1.35, 0.9 + stage * 0.09),
+  cooldownMs: Math.max(300, 760 - stage * 85),
+  reactionMs: Math.max(0, 400 - stage * 85),
 });
+
+// Every fighter's health is scaled up so rounds last a good while longer.
+const HP_MULT = 1.75;
+export const ROUND_HP = 100 * HP_MULT; // full health bar
+const roundHp = (health?: number) => Math.round((health || 100) * HP_MULT);
 
 // A player-chosen base difficulty shifts the whole curve up or down.
 export type DifficultyLevel = 'Easy' | 'Normal' | 'Hard';
@@ -168,7 +173,7 @@ export const isPlayerBlocking = (s: { gameStatus: string; playerY: number; moveD
   Math.sign(s.moveDir) === (Math.sign(s.playerPosition - s.opponentPosition) || -1);
 
 // The AI's odds of blocking a given attack rise through the gauntlet.
-const aiBlockChance = (stage: number) => Math.max(0, Math.min(0.45, 0.08 + stage * 0.07));
+const aiBlockChance = (stage: number) => Math.max(0, Math.min(0.5, 0.12 + stage * 0.07));
 let oppGuardTimeout: ReturnType<typeof setTimeout> | undefined;
 const AI_SWING_MS = 280; // the AI can't guard this soon after throwing an attack
 // How often the AI answers a jumping player with the anti-air uppercut.
@@ -301,8 +306,8 @@ export const useGameStore = create<GameStore>((set) => ({
   opponent: null,
   difficulty: 'Normal',
   setDifficulty: (level) => set({ difficulty: level }),
-  playerHealth: 100,
-  opponentHealth: 100,
+  playerHealth: ROUND_HP,
+  opponentHealth: ROUND_HP,
   gameStatus: 'ready',
   round: 1,
   roundLoser: null,
@@ -354,8 +359,8 @@ export const useGameStore = create<GameStore>((set) => ({
       gauntletStage: 0,
       opponent: ladder[0],
       currentStage: randomStageId(),
-      playerHealth: character.health,
-      opponentHealth: ladder[0].health,
+      playerHealth: roundHp(character.health),
+      opponentHealth: roundHp(ladder[0].health),
       ...freshBout(),
     });
   },
@@ -375,8 +380,8 @@ export const useGameStore = create<GameStore>((set) => ({
       gauntletStage: nextStage,
       opponent: nextOpponent,
       currentStage: randomStageId(),
-      playerHealth: state.selectedCharacter?.health || 100,
-      opponentHealth: nextOpponent.health,
+      playerHealth: roundHp(state.selectedCharacter?.health),
+      opponentHealth: roundHp(nextOpponent.health),
       ...freshBout(),
     });
     // The arena shows the VS intro, then starts the countdown.
@@ -773,8 +778,8 @@ export const useGameStore = create<GameStore>((set) => ({
     // Stop the round timer/countdown/AI/physics immediately.
     clearRoundLoops();
 
-    const baseHealth = state.selectedCharacter?.health || 100;
-    const opponentBaseHealth = state.opponent?.health || 100;
+    const baseHealth = roundHp(state.selectedCharacter?.health);
+    const opponentBaseHealth = roundHp(state.opponent?.health);
 
     // Update wins
     const playerWins = state.playerWins + (winner === 'player' ? 1 : 0);
@@ -856,8 +861,8 @@ export const useGameStore = create<GameStore>((set) => ({
   resetGame: () => {
     clearRoundLoops();
     set({
-      playerHealth: 100,
-      opponentHealth: 100,
+      playerHealth: ROUND_HP,
+      opponentHealth: ROUND_HP,
       gameStatus: 'ready',
       round: 1,
       roundLoser: null,

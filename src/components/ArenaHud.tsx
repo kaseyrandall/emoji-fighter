@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pause } from 'lucide-react';
 import { Character } from '../types/game';
+import { ROUND_HP } from '../store/gameStore';
 
 interface ArenaHudProps {
   player: Character;
@@ -27,7 +28,7 @@ const healthColor = (pct: number) =>
 // One health bar. Both are pinned to the timer (`anchor` is the side facing
 // it) and drain toward it; the colour fades between status stages.
 function HealthBar({ value, anchor }: { value: number; anchor: 'left' | 'right' }) {
-  const pct = Math.max(0, Math.min(100, value));
+  const pct = Math.max(0, Math.min(100, (value / ROUND_HP) * 100));
   const critical = pct > 0 && pct <= 15;
   return (
     <div
