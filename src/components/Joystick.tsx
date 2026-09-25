@@ -37,19 +37,22 @@ export default function Joystick({ onMoveDir, onJump, size = 128, hitPad = 0 }: 
     }
     setKnob({ x: dx, y: dy });
 
-    // Up (dominant) = jump, once per push.
-    if (dy < -dead && Math.abs(dy) >= Math.abs(dx)) {
+    // Horizontal input always counts — including on an up-diagonal, so
+    // jumping up-and-forward keeps its direction (that's how you jump over
+    // an opponent). It's reported before the jump so takeoff sees it.
+    const nx = dx / knobMax; // -1 .. 1
+    onMoveDir(Math.abs(nx) > 0.22 ? Math.max(-1, Math.min(1, nx)) : 0);
+
+    // Up = jump, once per push. The zone reaches ~60° either side of
+    // straight up, so a diagonal flick counts too.
+    if (dy < -dead && -dy >= Math.abs(dx) * 0.6) {
       if (!jumped.current) {
         onJump();
         jumped.current = true;
       }
-      onMoveDir(0);
       return;
     }
     jumped.current = false;
-
-    const nx = dx / knobMax; // -1 .. 1
-    onMoveDir(Math.abs(nx) > 0.22 ? Math.max(-1, Math.min(1, nx)) : 0);
   };
 
   const reset = () => {

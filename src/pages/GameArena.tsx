@@ -15,16 +15,12 @@ import { specialStyleOf } from '../three/specialStyles';
 export default function GameArena() {
   const navigate = useNavigate();
   const punchSound = useRef<UIFx>();
-  const heavySound = useRef<UIFx>();
-  const specialSound = useRef<UIFx>();
   const winSound = useRef<UIFx>();
   const loseSound = useRef<UIFx>();
 
   useEffect(() => {
     // Initialize sounds after component mounts
     punchSound.current = new UIFx('./assets/punch.wav', { volume: 0.5 });
-    heavySound.current = new UIFx('./assets/kick.wav', { volume: 0.5 });
-    specialSound.current = new UIFx('./assets/special.wav', { volume: 0.6 });
     winSound.current = new UIFx('./assets/victory.wav', { volume: 0.7 });
     loseSound.current = new UIFx('./assets/defeat.wav', { volume: 0.7 });
   }, []);
@@ -192,6 +188,9 @@ export default function GameArena() {
     };
   }, [gameStatus]);
 
+  // Logs the move (and plays the jab's sample). The heavy punch and every
+  // special are synthesized in the 3D scene's event handler, timed to the
+  // swing and impact, for both the player and the AI.
   const playMoveSound = (move: string) => {
     switch (move) {
       case 'punch':
@@ -208,7 +207,6 @@ export default function GameArena() {
           action: 'Move Used',
           label: 'Heavy Punch'
         });
-        heavySound.current?.play();
         break;
       case 'special':
         ReactGA.event({
@@ -216,7 +214,6 @@ export default function GameArena() {
           action: 'Move Used',
           label: `${selectedCharacter?.specialName}`
         });
-        specialSound.current?.play();
         break;
     }
   };
@@ -339,7 +336,9 @@ export default function GameArena() {
 
       {/* Game Status Overlay */}
       {(gameStatus === 'ready' || gameStatus === 'paused' || gameStatus === 'won' || gameStatus === 'lost' || gameStatus === 'champion') && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-10">
+        // During the countdown the overlay has no buttons, so it lets touches
+        // through: players can already be holding the joystick at "FIGHT!".
+        <div className={`fixed inset-0 bg-black/40 flex items-center justify-center z-10 ${gameStatus === 'ready' ? 'pointer-events-none' : ''}`}>
           <div className="text-center relative">
             {gameStatus === 'ready' && countdown > 0 && (
               <motion.h2

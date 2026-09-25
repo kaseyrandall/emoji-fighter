@@ -134,6 +134,13 @@ const randomStageId = () => stages[Math.floor(Math.random() * stages.length)].id
 // viewport can't fit the whole arc (see jumpScale in GameArena).
 export const JUMP_PEAK = 230;
 const JUMP_STEP = 16;
+// The player's jump: a parabola lasting this many 16ms ticks (~0.64s), with a
+// small speed boost when taking off in a direction.
+const PLAYER_JUMP_TICKS = 40;
+const JUMP_SPEED_BOOST = 1.1;
+// Horizontal momentum kept per tick in the air with no input (vs
+// PLAYER_FRICTION on the ground), so a jump carries its speed.
+const AIR_FRICTION = 0.97;
 // Above this height a fighter is "over" the other one and can pass across.
 const CLEAR_HEIGHT = JUMP_PEAK * 0.2;
 // Jump dodging: attacks only reach so far vertically. A jab needs both
@@ -373,13 +380,15 @@ export const useGameStore = create<GameStore>((set) => ({
       return;
     }
     if (move === 'jump' && !state.isJumping) {
-      set({ isJumping: true });
+      // Jumping while holding a direction commits to it at full speed, so a
+      // jump toward the opponent reliably carries you over them.
+      const takeoffVel = state.moveDir !== 0 ? Math.sign(state.moveDir) * PLAYER_MAX_SPEED * JUMP_SPEED_BOOST : state.playerVel;
+      set({ isJumping: true, playerVel: takeoffVel });
 
-      // One tracked arc (up then down). It bails if the round ends mid-jump so
-      // it can't keep writing playerY into the next round's reset.
+      // One tracked parabolic arc. It bails if the round ends mid-jump so it
+      // can't keep writing playerY into the next round's reset.
       if (playerJumpLoop) clearInterval(playerJumpLoop);
-      let h = 0;
-      let dir = 1;
+      let tick = 0;
       playerJumpLoop = setInterval(() => {
         // Paused: hold still, keeping the loop alive until resumed.
         if (useGameStore.getState().gameStatus === 'paused') return;
@@ -387,14 +396,14 @@ export const useGameStore = create<GameStore>((set) => ({
           if (playerJumpLoop) { clearInterval(playerJumpLoop); playerJumpLoop = undefined; }
           return;
         }
-        h += dir * JUMP_STEP;
-        if (h >= JUMP_PEAK) { h = JUMP_PEAK; dir = -1; }
-        if (h <= 0) {
+        tick++;
+        if (tick >= PLAYER_JUMP_TICKS) {
           if (playerJumpLoop) { clearInterval(playerJumpLoop); playerJumpLoop = undefined; }
           set({ playerY: 0, isJumping: false });
           return;
         }
-        set({ playerY: h });
+        const x = tick / PLAYER_JUMP_TICKS;
+        set({ playerY: JUMP_PEAK * 4 * x * (1 - x) });
       }, 16);
 
       return;
@@ -621,7 +630,7 @@ export const useGameStore = create<GameStore>((set) => ({
       const target = s.moveDir * PLAYER_MAX_SPEED;
       let vel = s.moveDir !== 0
         ? s.playerVel + (target - s.playerVel) * PLAYER_ACCEL
-        : s.playerVel * PLAYER_FRICTION;
+        : s.playerVel * (s.playerY > 0 ? AIR_FRICTION : PLAYER_FRICTION);
       if (Math.abs(vel) < 0.02) vel = 0;
 
       let pos = s.playerPosition + vel;

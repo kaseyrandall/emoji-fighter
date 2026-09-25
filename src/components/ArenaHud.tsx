@@ -59,8 +59,9 @@ function ArenaHudBase({
             ))}
           </div>
         </div>
-        <div className="h-2.5 sm:h-3.5 bg-gray-800/80 rounded-full overflow-hidden border border-black/40">
-          <div className="h-full bg-gradient-to-r from-green-400 to-green-500 transition-all duration-300" style={{ width: `${playerHealth}%` }} />
+        {/* Both health bars are pinned to the timer and drain toward it. */}
+        <div className="h-2.5 sm:h-3.5 bg-gray-800/80 rounded-full overflow-hidden border border-black/40 flex justify-end">
+          <div className="h-full bg-gradient-to-l from-green-400 to-green-500 transition-all duration-300" style={{ width: `${playerHealth}%` }} />
         </div>
         {/* super meter (charged by landing attacks) */}
         <div className="mt-1 h-1.5 bg-gray-800/70 rounded-full overflow-hidden">
@@ -105,8 +106,8 @@ function ArenaHudBase({
           </div>
           <span className="truncate text-[10px] sm:text-xs font-semibold text-right ml-auto">{opponent.name}</span>
         </div>
-        <div className="h-2.5 sm:h-3.5 bg-gray-800/80 rounded-full overflow-hidden border border-black/40 flex justify-end">
-          <div className="h-full bg-gradient-to-l from-red-400 to-red-500 transition-all duration-300" style={{ width: `${opponentHealth}%` }} />
+        <div className="h-2.5 sm:h-3.5 bg-gray-800/80 rounded-full overflow-hidden border border-black/40">
+          <div className="h-full bg-gradient-to-r from-red-400 to-red-500 transition-all duration-300" style={{ width: `${opponentHealth}%` }} />
         </div>
       </div>
 

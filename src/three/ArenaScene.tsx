@@ -9,15 +9,18 @@ import { FighterInput, defaultFighterInput } from './fighterInput';
 import { Stage3D } from './Stage3D';
 import { Vfx, VfxApi } from './Vfx';
 import { specialStyleOf } from './specialStyles';
+import * as sfx from '../audio/sfx';
 
 // The game store still simulates the fight on its original 2D coordinates:
 // positions are a fighter's left edge as a % of the arena, jumps are px of
 // height. These map them into the 3D world (the platform runs along X).
 const POS_CENTER = 41; // midpoint of the store's POS_MIN..POS_MAX range
 const WORLD_PER_POS = 0.16;
-const JUMP_HEIGHT = 2.3; // world units at the store's JUMP_PEAK
+const JUMP_HEIGHT = 2.8; // world units at the store's JUMP_PEAK
 const toWorldX = (pos: number) => (pos - POS_CENTER) * WORLD_PER_POS;
 const toWorldY = (y: number) => (y / JUMP_PEAK) * JUMP_HEIGHT;
+// How far the fight camera sits above its original framing (see CameraRig).
+const CAM_LIFT = 0.45;
 // Store positions move ~60 steps a second; velocity in world units / second.
 const VEL_SCALE = WORLD_PER_POS * 60;
 
@@ -128,10 +131,12 @@ function CameraRig({ fx }: { fx: React.MutableRefObject<FxState> }) {
       // Rise with an airborne fighter so a jump never leaves the top of a
       // short landscape phone (or disappears behind the HUD).
       const air = Math.max(toWorldY(s.playerY), toWorldY(s.opponentY)) * 0.45;
-      targetPos.set(focusX * 0.9, 2.5 + air, dist - koPush);
+      // CAM_LIFT raises the camera and its aim together, which slides the
+      // whole scene a little lower on screen.
+      targetPos.set(focusX * 0.9, 2.5 + CAM_LIFT + air, dist - koPush);
       // Look a little below the fighters' centres so they sit high enough to
       // clear the on-screen touch controls.
-      targetLook.set(focusX * 0.95, 1.05 + air, 0);
+      targetLook.set(focusX * 0.95, 1.05 + CAM_LIFT + air, 0);
     }
 
     const k = 1 - Math.exp(-(s.gameStatus === 'intro' ? 2.5 : 5) * dt);
@@ -196,9 +201,11 @@ function EventFx({ fx, vfx }: { fx: React.MutableRefObject<FxState>; vfx: React.
       target.set(toX, toY + 1.05, 0.3);
       api.ring(v, style.color, 1.8, 0.4);
       api.special(style, v, Math.sign(toX - fromX) || 1, target);
+      sfx.special(casterId);
     };
     if (s.playerAttackSeq !== last.current.attack) {
       last.current.attack = s.playerAttackSeq;
+      if (s.currentMove === 'heavy') sfx.heavyWindup();
       if (s.currentMove === 'special') {
         castSpecial(s.selectedCharacter?.id, px, toWorldY(s.playerY), ox, toWorldY(s.opponentY));
         f.zoom = 1;
@@ -206,6 +213,7 @@ function EventFx({ fx, vfx }: { fx: React.MutableRefObject<FxState>; vfx: React.
     }
     if (s.opponentAttackSeq !== last.current.oppAttack) {
       last.current.oppAttack = s.opponentAttackSeq;
+      if (s.opponentMove === 'heavy') sfx.heavyWindup();
       if (s.opponentMove === 'special') {
         castSpecial(s.opponent?.id, ox, toWorldY(s.opponentY), px, toWorldY(s.playerY));
         f.zoom = 0.6;
@@ -224,6 +232,7 @@ function EventFx({ fx, vfx }: { fx: React.MutableRefObject<FxState>; vfx: React.
       // Sparks fly from the side the blow came from.
       const side = Math.sign(attackerX - target.x) || 1;
 
+      if (h.move === 'heavy' && h.result !== 'dodged') sfx.heavyImpact(h.result === 'blocked');
       if (h.result === 'dodged') {
         // Whiffed under / over a jump: just call it out on the dodger.
         v.set(target.x, target.y + 2.1, 0.6);
