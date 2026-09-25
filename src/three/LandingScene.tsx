@@ -25,8 +25,9 @@ function fadeTexture() {
   const ctx = c.getContext('2d')!;
   const g = ctx.createLinearGradient(0, 256, 0, 0);
   g.addColorStop(0, 'rgba(7,7,13,1)');
-  g.addColorStop(0.45, 'rgba(7,7,13,0.92)');
-  g.addColorStop(0.75, 'rgba(7,7,13,0.5)');
+  g.addColorStop(0.35, 'rgba(7,7,13,0.94)');
+  g.addColorStop(0.6, 'rgba(7,7,13,0.7)');
+  g.addColorStop(0.82, 'rgba(7,7,13,0.3)');
   g.addColorStop(1, 'rgba(7,7,13,0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 4, 256);
@@ -143,10 +144,10 @@ function Contents() {
   const pairX = portrait ? 1.3 : 5.4;
   const pairY = portrait ? -4.3 : -2.6;
   const pairScale = portrait ? 0.55 : 1;
-  // The fade band behind the pair: its top edge sits ~1 unit above the
-  // fighters' heads, and it extends well below the bottom of the view.
-  const fadeTop = pairY + 2.2 * pairScale + (portrait ? 0.9 : 1.2);
-  const fadeH = 7;
+  // The fade band behind the pair: its top edge sits well above the
+  // fighters' heads (~2.5 units), and it extends below the bottom of the view.
+  const fadeTop = pairY + 2.2 * pairScale + (portrait ? 2.6 : 2.4);
+  const fadeH = 10;
   const fadeY = fadeTop - fadeH / 2;
   // Smaller falling emoji in the narrow portrait view.
   const dropScale = portrait ? 0.6 : 1;
