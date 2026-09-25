@@ -34,10 +34,9 @@ const bounceOut = (t: number) => {
   return n * (t -= 2.625 / d) * t + 0.984375;
 };
 const KO_FALL_S = 0.42;
-// Lying down: how high the body's centre rests above the floor (about half
-// the emoji's visible width), and how far it rolls face-up onto the floor.
-const KO_REST_HEIGHT = 0.62;
-const KO_FACE_UP = 0.45;
+// Lying flat: the body rests face-up on the floor, its centre raised by
+// half the body's thickness so it sits on the surface.
+const KO_REST_HEIGHT = 0.19;
 const damp = (cur: number, target: number, lambda: number, dt: number) =>
   THREE.MathUtils.lerp(cur, target, 1 - Math.exp(-lambda * dt));
 // Snap-out / ease-back curve for a strike: fast extension, slower recovery.
@@ -262,21 +261,22 @@ export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 
       rg.lerp(new THREE.Vector3(0.6, 2.25, 0.1), a.win);
     }
 
-    // --- KO: falls flat onto its back on the floor ---
-    // Pivoting about the feet, the body swings a full 90° backward, is raised
-    // so it rests on the floor rather than sinking into it, and rolls a
-    // little face-up (toward the camera's view of the floor). The gloves
-    // drop to the floor beside it.
+    // --- KO: falls flat on its back, face up on the floor ---
+    // Pivoting about the feet, the body swings 90° backward and rolls 90°
+    // face-up at the same time, so it ends lying flat on the floor like a
+    // pancake (the KO camera rises to look down on it). The gloves fall
+    // flat beside it.
     const ko = a.ko;
     let koRotX = 0;
+    // The side facing the camera is the back of the art when facing right,
+    // so roll the other way to keep the face turning up.
+    const faceUp = -(Math.PI / 2) * ko * Math.sign(Math.cos(a.yaw) || 1);
     if (ko > 0.001) {
       bodyRotZ = bodyRotZ * (1 - ko) - (Math.PI / 2) * ko;
       bodyY = bodyY * (1 - ko) + KO_REST_HEIGHT * ko;
-      // The visible side is the back of the art when facing right, so roll
-      // the other way to keep the face turning up.
-      koRotX = -KO_FACE_UP * ko * Math.sign(Math.cos(a.yaw) || 1);
-      lg.lerp(new THREE.Vector3(0.35, 0.16, 0.65), ko);
-      rg.lerp(new THREE.Vector3(1.55, 0.16, 0.35), ko);
+      koRotX = faceUp;
+      lg.lerp(new THREE.Vector3(0.2, 0.1, 0.8), ko);
+      rg.lerp(new THREE.Vector3(1.7, 0.1, 0.75), ko);
       leadRot *= 1 - ko;
       rearRot *= 1 - ko;
     }
@@ -294,13 +294,14 @@ export function Fighter({ emoji, auraColor = '#d8b4fe', read, timeScale, size = 
     rearGlove.current!.position.copy(rg);
     leadGlove.current!.scale.setScalar(gloveScale);
     rearGlove.current!.scale.setScalar(0.9 * gloveScale * rearScale);
-    leadGlove.current!.rotation.z = leadRot;
-    rearGlove.current!.rotation.z = rearRot;
+    leadGlove.current!.rotation.set(faceUp, 0, leadRot);
+    rearGlove.current!.rotation.set(faceUp, 0, rearRot);
 
     // Contact shadow shrinks and fades as the fighter rises.
     const h = a.y;
     const s = Math.max(0.35, 1 - h * 0.18) * size;
-    shadow.current!.scale.set(2.1 * s * (1 + a.ko * 0.6), 0.75 * s, 1);
+    // Lying flat, the body covers much more floor front-to-back.
+    shadow.current!.scale.set(2.1 * s * (1 + a.ko * 0.3), 0.75 * s * (1 + a.ko * 1.6), 1);
     // A body lying down sits behind its feet: move the shadow under it.
     shadow.current!.position.x = -inp.facing * 0.9 * a.ko;
     shadowMat.opacity = Math.max(0.25, 1 - h * 0.2);
