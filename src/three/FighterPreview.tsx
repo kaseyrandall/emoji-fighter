@@ -1,6 +1,8 @@
 import React from 'react';
 import * as THREE from 'three';
 import { Canvas, useFrame } from '@react-three/fiber';
+import { AdaptiveQuality } from './AdaptiveQuality';
+import { initialDpr } from '../store/qualityStore';
 import { Character, AttackMove } from '../types/game';
 import { accentOf } from '../data/accents';
 import { Fighter } from './Fighter';
@@ -80,12 +82,13 @@ function Showcase({ character }: { character: Character }) {
 export default function FighterPreview({ character }: { character: Character }) {
   return (
     <Canvas
-      dpr={[1, 1.75]}
+      dpr={initialDpr()}
       flat
       gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
       camera={{ fov: 32, near: 0.1, far: 40, position: [0, 1.9, 6.6] }}
       onCreated={({ camera }) => camera.lookAt(0, 1.05, 0)}
     >
+      <AdaptiveQuality />
       <Showcase key={character.id} character={character} />
     </Canvas>
   );

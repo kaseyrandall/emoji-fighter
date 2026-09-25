@@ -1,6 +1,8 @@
 import React from 'react';
 import * as THREE from 'three';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { AdaptiveQuality } from './AdaptiveQuality';
+import { initialDpr, useQuality } from '../store/qualityStore';
 import { characters } from '../data/characters';
 import { specialStyleOf } from './specialStyles';
 import { AttackMove } from '../types/game';
@@ -103,6 +105,7 @@ function Rig() {
 }
 
 function Contents() {
+  const quality = useQuality((q) => q.level);
   const drops = React.useMemo(
     () => Array.from({ length: RAIN_COUNT }, () => makeDrop(BOTTOM + Math.random() * (TOP - BOTTOM))),
     []
@@ -123,7 +126,8 @@ function Contents() {
       <sprite position={[0, 0.8, -8]} scale={[22, 12, 1]}>
         <spriteMaterial map={glowTexture()} color="#f59e0b" transparent opacity={0.22} depthWrite={false} blending={THREE.AdditiveBlending} />
       </sprite>
-      {drops.map((d, i) => (
+      {/* Half the rain when the device needs lighter rendering. */}
+      {drops.slice(0, quality >= 2 ? RAIN_COUNT / 2 : RAIN_COUNT).map((d, i) => (
         <RainDrop key={i} initial={d} />
       ))}
       <group position={[0, -2.6, 0]}>
@@ -156,7 +160,7 @@ export default function LandingScene() {
   return (
     <Canvas
       className="!fixed inset-0"
-      dpr={[1, 1.75]}
+      dpr={initialDpr()}
       flat
       gl={{ antialias: true, powerPreference: 'high-performance' }}
       camera={{ fov: 45, near: 0.1, far: 80, position: [0, 0.4, 13] }}
@@ -165,6 +169,7 @@ export default function LandingScene() {
       eventSource={document.getElementById('root') ?? undefined}
       eventPrefix="client"
     >
+      <AdaptiveQuality />
       <Contents />
     </Canvas>
   );

@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { useFrame, useLoader } from '@react-three/fiber';
 import { Stage } from '../types/game';
 import { FloorPattern, floorTexture, glowTexture } from './textures';
+import { useQuality } from '../store/qualityStore';
 
 // Per-stage 3D dressing: the painted stage art wraps a curved backdrop, a
 // textured fight platform sits in front of it, and each stage adds its own
@@ -450,6 +451,7 @@ const PROPS: Record<Props, () => React.ReactElement> = {
 
 export function Stage3D({ stage }: { stage: Stage }) {
   const theme = themeOf(stage.id);
+  const quality = useQuality((q) => q.level);
   const StageProps = PROPS[theme.props];
   return (
     <group>
@@ -464,7 +466,8 @@ export function Stage3D({ stage }: { stage: Stage }) {
       </React.Suspense>
       <Floor theme={theme} />
       <StageProps />
-      <Motes color={theme.motes} />
+      {/* Purely decorative: dropped when the device needs lighter rendering. */}
+      {quality < 2 && <Motes color={theme.motes} />}
     </group>
   );
 }

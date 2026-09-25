@@ -1,6 +1,8 @@
 import React from 'react';
 import * as THREE from 'three';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { AdaptiveQuality } from './AdaptiveQuality';
+import { initialDpr } from '../store/qualityStore';
 import { useGameStore, JUMP_PEAK, isPlayerBlocking } from '../store/gameStore';
 import { stages } from '../data/stages';
 import { Character } from '../types/game';
@@ -319,11 +321,12 @@ export default function ArenaScene() {
   return (
     <Canvas
       className="!absolute inset-0"
-      dpr={[1, 1.75]}
+      dpr={initialDpr()}
       flat
       gl={{ antialias: true, powerPreference: 'high-performance' }}
       camera={{ fov: 40, near: 0.1, far: 120, position: [0, 3, 12] }}
     >
+      <AdaptiveQuality />
       <SceneContents />
     </Canvas>
   );
