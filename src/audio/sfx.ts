@@ -2,6 +2,11 @@
 // oscillators and filtered noise, so none of them add download weight. Each
 // fighter's special has its own recipe matching its visual effect.
 
+import { useSettings } from '../store/settingsStore';
+
+// Sound effects can be switched off in the pause menu's settings.
+const enabled = () => useSettings.getState().sfx;
+
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
 let noise: AudioBuffer | null = null;
@@ -57,6 +62,7 @@ interface ToneOpts {
 }
 
 function tone({ type = 'sine', from, to, dur, vol = 0.3, delay = 0, attack = 0.01, vibrato, lowpass }: ToneOpts) {
+  if (!enabled()) return;
   const c = audio();
   if (!c || !master) return;
   const t = c.currentTime + delay;
@@ -99,6 +105,7 @@ interface NoiseOpts {
 }
 
 function hiss({ filter = 'bandpass', from, to, q = 1, dur, vol = 0.3, delay = 0, attack = 0.01 }: NoiseOpts) {
+  if (!enabled()) return;
   const c = audio();
   if (!c || !master || !noise) return;
   const t = c.currentTime + delay;
@@ -118,6 +125,26 @@ function hiss({ filter = 'bandpass', from, to, q = 1, dur, vol = 0.3, delay = 0,
 }
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
+
+// --- Jab -------------------------------------------------------------------
+
+// The jab being thrown: a short, quick swish.
+export function punchThrow() {
+  hiss({ from: 900, to: 2400, q: 2.5, dur: 0.1, vol: 0.14, attack: 0.03 });
+}
+
+// The jab landing: the heavy's thud, lighter and snappier — higher, shorter
+// and with a crisper slap. A blocked jab is just a quick glove tap.
+export function punchImpact(blocked: boolean) {
+  if (blocked) {
+    tone({ from: 220, to: 130, dur: 0.07, vol: 0.35 });
+    tone({ type: 'triangle', from: 1000, to: 800, dur: 0.05, vol: 0.18 });
+    return;
+  }
+  tone({ from: 280, to: 105, dur: 0.13, vol: 0.6 });
+  tone({ type: 'triangle', from: 170, to: 90, dur: 0.1, vol: 0.3 });
+  hiss({ filter: 'lowpass', from: 4200, to: 700, dur: 0.07, vol: 0.5 });
+}
 
 // --- Heavy punch -----------------------------------------------------------
 

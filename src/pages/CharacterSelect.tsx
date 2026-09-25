@@ -9,6 +9,7 @@ import { Swords, Sparkles, ArrowLeft, ChevronRight } from 'lucide-react';
 import { Character } from '../types/game';
 import { accentOf } from '../data/accents';
 import FighterPreview from '../three/FighterPreview';
+import { useSettings } from '../store/settingsStore';
 
 
 const overallOf = (c: Character) =>
@@ -80,7 +81,7 @@ export default function CharacterSelect() {
 
   const handleSelect = (id: string) => {
     setSelectedId(id);
-    new Audio('/assets/select.wav').play().catch(() => {});
+    if (useSettings.getState().sfx) new Audio('/assets/select.wav').play().catch(() => {});
   };
 
   const handleFight = () => {

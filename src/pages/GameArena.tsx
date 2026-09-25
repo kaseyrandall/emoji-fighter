@@ -10,17 +10,17 @@ import Joystick from '../components/Joystick';
 import Credits from '../components/Credits';
 import { ArenaHud } from '../components/ArenaHud';
 import ArenaScene from '../three/ArenaScene';
+import SettingsPanel from '../components/SettingsPanel';
+import { useSettings } from '../store/settingsStore';
 import { specialStyleOf } from '../three/specialStyles';
 
 export default function GameArena() {
   const navigate = useNavigate();
-  const punchSound = useRef<UIFx>();
   const winSound = useRef<UIFx>();
   const loseSound = useRef<UIFx>();
 
   useEffect(() => {
     // Initialize sounds after component mounts
-    punchSound.current = new UIFx('./assets/punch.wav', { volume: 0.5 });
     winSound.current = new UIFx('./assets/victory.wav', { volume: 0.7 });
     loseSound.current = new UIFx('./assets/defeat.wav', { volume: 0.7 });
   }, []);
@@ -81,6 +81,7 @@ export default function GameArena() {
 
   const [castFlash, setCastFlash] = useState(false);
   const [showCredits, setShowCredits] = useState(false);
+  const bgmRef = useRef<HTMLAudioElement | null>(null);
 
   // Brief purple wash when the player casts their super (the 3D scene handles
   // the rings / sparks / camera punch-in).
@@ -97,17 +98,28 @@ export default function GameArena() {
       return;
     }
 
-    // Play background music
+    // Background music (started / stopped by the Music setting below).
     const bgm = new Audio('/assets/fight-bgm.wav');
     bgm.loop = true;
     bgm.volume = 0.3;
-    bgm.play().catch(() => {});
+    bgmRef.current = bgm;
+    if (useSettings.getState().music) bgm.play().catch(() => {});
 
     return () => {
       bgm.pause();
       bgm.currentTime = 0;
+      bgmRef.current = null;
     };
   }, []);
+
+  // Music on/off from the pause menu's settings.
+  const musicOn = useSettings((s) => s.music);
+  useEffect(() => {
+    const bgm = bgmRef.current;
+    if (!bgm) return;
+    if (musicOn) bgm.play().catch(() => {});
+    else bgm.pause();
+  }, [musicOn]);
 
   // Auto-pause when the tab/app is backgrounded: stops the loops (saving CPU
   // and battery) and keeps the player from being KO'd while they're away.
@@ -133,14 +145,14 @@ export default function GameArena() {
         action: gameStatus === 'champion' ? 'Gauntlet Cleared' : 'Stage Cleared',
         label: `${selectedCharacter?.name} vs ${opponent?.name}`
       });
-      winSound.current?.play();
+      if (useSettings.getState().sfx) winSound.current?.play();
     } else if (gameStatus === 'lost') {
       ReactGA.event({
         category: 'Game',
         action: 'Game Lost',
         label: `${selectedCharacter?.name} vs ${opponent?.name}`
       });
-      loseSound.current?.play();
+      if (useSettings.getState().sfx) loseSound.current?.play();
     }
   }, [gameStatus]);
 
@@ -199,7 +211,6 @@ export default function GameArena() {
           action: 'Move Used',
           label: 'Punch'
         });
-        punchSound.current?.play();
         break;
       case 'heavy':
         ReactGA.event({
@@ -336,9 +347,8 @@ export default function GameArena() {
 
       {/* Game Status Overlay */}
       {(gameStatus === 'ready' || gameStatus === 'paused' || gameStatus === 'won' || gameStatus === 'lost' || gameStatus === 'champion') && (
-        // During the countdown the overlay has no buttons, so it lets touches
-        // through: players can already be holding the joystick at "FIGHT!".
-        <div className={`fixed inset-0 bg-black/40 flex items-center justify-center z-10 ${gameStatus === 'ready' ? 'pointer-events-none' : ''}`}>
+        // Covers the controls too, so they can't be used during the countdown.
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-10">
           <div className="text-center relative">
             {gameStatus === 'ready' && countdown > 0 && (
               <motion.h2
@@ -361,7 +371,7 @@ export default function GameArena() {
               </motion.h2>
             )}
             {gameStatus === 'paused' && (
-              <h2 className="text-4xl mb-4 text-white">PAUSED</h2>
+              <h2 className="text-3xl mb-3 text-white">PAUSED</h2>
             )}
             {(gameStatus === 'won' || gameStatus === 'lost' || gameStatus === 'champion') && (
               <h2 className="flex flex-col mb-4">
@@ -392,32 +402,36 @@ export default function GameArena() {
             )}
             <div className="flex flex-col gap-3 lg:gap-4 justify-center">
               {gameStatus === 'paused' && (
-                <>
-                  <button
-                    onClick={resumeGame}
-                    className="px-6 py-3 bg-green-500 rounded-lg flex items-center justify-center gap-2"
-                  >
-                    <Play size={20} />
-                    Resume
-                  </button>
-                  <button
-                    onClick={() => {
-                      resetGame();
-                      navigate('/select');
-                    }}
-                    className="px-6 py-3 bg-red-500 rounded-lg flex items-center justify-center gap-2"
-                  >
-                    <RotateCcw size={20} />
-                    Quit
-                  </button>
-                  <button
-                    onClick={() => setShowCredits(true)}
-                    className="px-6 py-2 text-gray-300 hover:text-white transition-colors flex items-center justify-center gap-2 text-sm font-semibold"
-                  >
-                    <Info size={16} />
-                    Credits
-                  </button>
-                </>
+                // Menu buttons beside the settings list (stacked on narrow screens).
+                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-center sm:items-stretch">
+                  <div className="flex flex-col gap-3 w-48">
+                    <button
+                      onClick={resumeGame}
+                      className="px-6 py-3 bg-green-500 rounded-lg flex items-center justify-center gap-2"
+                    >
+                      <Play size={20} />
+                      Resume
+                    </button>
+                    <button
+                      onClick={() => {
+                        resetGame();
+                        navigate('/select');
+                      }}
+                      className="px-6 py-3 bg-red-500 rounded-lg flex items-center justify-center gap-2"
+                    >
+                      <RotateCcw size={20} />
+                      Quit
+                    </button>
+                    <button
+                      onClick={() => setShowCredits(true)}
+                      className="px-6 py-2 text-gray-300 hover:text-white transition-colors flex items-center justify-center gap-2 text-sm font-semibold"
+                    >
+                      <Info size={16} />
+                      Credits
+                    </button>
+                  </div>
+                  <SettingsPanel />
+                </div>
               )}
               {gameStatus === 'won' && (
                 <button

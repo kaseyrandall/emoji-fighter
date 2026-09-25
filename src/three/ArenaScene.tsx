@@ -205,6 +205,7 @@ function EventFx({ fx, vfx }: { fx: React.MutableRefObject<FxState>; vfx: React.
     };
     if (s.playerAttackSeq !== last.current.attack) {
       last.current.attack = s.playerAttackSeq;
+      if (s.currentMove === 'punch') sfx.punchThrow();
       if (s.currentMove === 'heavy') sfx.heavyWindup();
       if (s.currentMove === 'special') {
         castSpecial(s.selectedCharacter?.id, px, toWorldY(s.playerY), ox, toWorldY(s.opponentY));
@@ -213,6 +214,7 @@ function EventFx({ fx, vfx }: { fx: React.MutableRefObject<FxState>; vfx: React.
     }
     if (s.opponentAttackSeq !== last.current.oppAttack) {
       last.current.oppAttack = s.opponentAttackSeq;
+      if (s.opponentMove === 'punch') sfx.punchThrow();
       if (s.opponentMove === 'heavy') sfx.heavyWindup();
       if (s.opponentMove === 'special') {
         castSpecial(s.opponent?.id, ox, toWorldY(s.opponentY), px, toWorldY(s.playerY));
@@ -232,7 +234,10 @@ function EventFx({ fx, vfx }: { fx: React.MutableRefObject<FxState>; vfx: React.
       // Sparks fly from the side the blow came from.
       const side = Math.sign(attackerX - target.x) || 1;
 
-      if (h.move === 'heavy' && h.result !== 'dodged') sfx.heavyImpact(h.result === 'blocked');
+      if (h.result !== 'dodged') {
+        if (h.move === 'heavy') sfx.heavyImpact(h.result === 'blocked');
+        if (h.move === 'punch') sfx.punchImpact(h.result === 'blocked');
+      }
       if (h.result === 'dodged') {
         // Whiffed under / over a jump: just call it out on the dodger.
         v.set(target.x, target.y + 2.1, 0.6);
