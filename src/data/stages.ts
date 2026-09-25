@@ -6,6 +6,7 @@ const pirateCove = '/assets/pirate-cove.webp';
 const jungleTemple = '/assets/jungle-temple.webp';
 const emojiFactory = '/assets/emoji-factory.webp';
 const neonSubway = '/assets/neon-subway.webp';
+const sunsetGasStation = '/assets/sunset-gas-station.webp';
 
 import { Stage } from '../types/game';
 
@@ -49,5 +50,13 @@ export const stages: Stage[] = [
     description: 'A humming platform under the neon-soaked city',
     floorColor: '',
     ambientLight: 'bg-fuchsia-500/20'
+  },
+  {
+    id: 'sunset-gas-station',
+    name: 'Sunset Gas Station',
+    background: sunsetGasStation,
+    description: 'A roadside forecourt on the last stretch of desert highway',
+    floorColor: '',
+    ambientLight: 'bg-orange-500/20'
   }
 ];

@@ -11,7 +11,7 @@ export interface Character {
   };
   moves: {
     punch: number;
-    kick: number;
+    heavy: number; // uppercut: slower recovery, more damage
     special: number;
   };
   specialName: string;
@@ -46,14 +46,20 @@ export interface GameState {
   playerFacing: 'left' | 'right';
 }
 
+// How an attack in range resolved: it landed, was guarded (chip damage), or
+// whiffed because the target was out of its vertical reach (a jump dodge).
+export type HitResult = 'hit' | 'blocked' | 'dodged';
+
 export interface HitEvent {
   target: 'player' | 'opponent';
   amount: number;
   move: Move | null;
   seq: number;
+  result: HitResult;
 }
 
-export type Move = 'punch' | 'kick' | 'special' | 'left' | 'right' | 'jump';
+export type AttackMove = 'punch' | 'heavy' | 'special';
+export type Move = AttackMove | 'left' | 'right' | 'jump';
 
 export interface Stage {
   id: string;

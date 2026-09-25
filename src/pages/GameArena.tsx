@@ -1,51 +1,35 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ReactGA from 'react-ga4';
-import { motion, AnimatePresence, useAnimationControls } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import UIFx from 'uifx';
-import { useGameStore, JUMP_PEAK } from '../store/gameStore';
-import { Play, RotateCcw, Swords, Info } from 'lucide-react';
-import { stages } from '../data/stages';
+import { useShallow } from 'zustand/react/shallow';
+import { useGameStore } from '../store/gameStore';
+import { RotateCcw, Swords } from 'lucide-react';
 import Joystick from '../components/Joystick';
 import Credits from '../components/Credits';
 import { ArenaHud } from '../components/ArenaHud';
-import { StageBackdrop } from '../components/StageBackdrop';
-
-// The store animates a jump to a fixed peak (see JUMP_PEAK in gameStore). On a
-// short landscape phone that arc carries the fighter off the top of the screen,
-// so the arena scales it to the headroom it actually has. playerY is purely
-// presentational — nothing in hit detection reads it — so scaling only changes
-// how high the jump looks, never whether an attack lands.
-
-// Breathing room kept between the top of the fighter's head and the top of the
-// screen at the peak of a jump.
-const JUMP_CEILING_GAP = 8;
-
-interface FloatingHit {
-  id: number;
-  amount: number;
-  target: 'player' | 'opponent';
-  x: number;
-  special: boolean;
-}
+import ArenaScene from '../three/ArenaScene';
+import PauseMenu from '../components/PauseMenu';
+import { useSettings } from '../store/settingsStore';
+import { playStageMusic, stopMusic } from '../audio/music';
+import { enterFullscreen } from '../lib/fullscreen';
+import { specialStyleOf } from '../three/specialStyles';
 
 export default function GameArena() {
   const navigate = useNavigate();
-  const punchSound = useRef<UIFx>();
-  const kickSound = useRef<UIFx>();
-  const specialSound = useRef<UIFx>();
   const winSound = useRef<UIFx>();
   const loseSound = useRef<UIFx>();
 
   useEffect(() => {
     // Initialize sounds after component mounts
-    punchSound.current = new UIFx('./assets/punch.wav', { volume: 0.5 });
-    kickSound.current = new UIFx('./assets/kick.wav', { volume: 0.5 });
-    specialSound.current = new UIFx('./assets/special.wav', { volume: 0.6 });
     winSound.current = new UIFx('./assets/victory.wav', { volume: 0.7 });
     loseSound.current = new UIFx('./assets/defeat.wav', { volume: 0.7 });
   }, []);
-  
+
+  // Only the values the DOM overlays show. Positions, jumps and hit events
+  // change every frame and are read by the 3D scene directly, so subscribing
+  // to them here would re-render this whole tree at 60fps.
   const {
     selectedCharacter,
     opponent,
@@ -53,45 +37,41 @@ export default function GameArena() {
     opponentHealth,
     gameStatus,
     countdown,
-    performMove,
-    resetGame,
-    togglePause,
-    pauseGame,
-    resumeGame,
-    isAttacking,
-    currentMove,
-    currentStage,
-    startCountdown,
     timer,
     round,
     roundLoser,
     playerWins,
     opponentWins,
-    playerPosition,
-    playerY,
-    opponentPosition,
-    opponentY,
-    isOpponentAttacking,
-    hitEvent,
     gauntletStage,
     gauntletOpponents,
-    advanceGauntlet,
-    playerFacing,
-    setMoveDir,
-    performSpecial,
-    specialMeter
-  } = useGameStore();
+    specialMeter,
+    opponentSpecialMeter,
+  } = useGameStore(
+    useShallow((s) => ({
+      selectedCharacter: s.selectedCharacter,
+      opponent: s.opponent,
+      playerHealth: s.playerHealth,
+      opponentHealth: s.opponentHealth,
+      gameStatus: s.gameStatus,
+      countdown: s.countdown,
+      timer: s.timer,
+      round: s.round,
+      roundLoser: s.roundLoser,
+      playerWins: s.playerWins,
+      opponentWins: s.opponentWins,
+      gauntletStage: s.gauntletStage,
+      gauntletOpponents: s.gauntletOpponents,
+      specialMeter: s.specialMeter,
+      opponentSpecialMeter: s.opponentSpecialMeter,
+    }))
+  );
+  // Actions are stable references.
+  const { performMove, resetGame, togglePause, pauseGame, resumeGame, startCountdown, advanceGauntlet, setMoveDir, performSpecial } =
+    useGameStore.getState();
 
-  // Super meter: charged by landing punches/kicks; the special fires only when full.
+  // Super meter: charged by landing punches; the special fires only when full.
   const specialReady = specialMeter >= 100;
-  // The charged aura / glow should only pulse during live play — not linger on
-  // the pause, KO or result screens.
-  const chargedGlow = specialReady && gameStatus === 'playing';
-  // The loser stays knocked down through the KO beat and, when the match ends,
-  // the result screen too.
-  const koScreen =
-    gameStatus === 'roundEnd' || gameStatus === 'won' || gameStatus === 'lost' || gameStatus === 'champion';
-  const useSpecial = () => {
+  const fireSpecial = () => {
     const s = useGameStore.getState();
     if (s.gameStatus === 'playing' && s.specialMeter >= 100) {
       performSpecial();
@@ -99,200 +79,29 @@ export default function GameArena() {
     }
   };
 
-  const stage = stages.find(s => s.id === currentStage);
   const nextOpponent = gauntletOpponents[gauntletStage + 1];
 
-  // --- Hit VFX: screen shake, red flash, floating damage numbers ---
-  const arenaControls = useAnimationControls();
-  const [floatingHits, setFloatingHits] = useState<FloatingHit[]>([]);
-  const [flash, setFlash] = useState<'player' | 'opponent' | null>(null);
-  // Special-cast VFX: an expanding shockwave at the player + a brief screen flash.
-  const [specialBurst, setSpecialBurst] = useState<{ id: number; x: number; y: number } | null>(null);
   const [castFlash, setCastFlash] = useState(false);
   const [showCredits, setShowCredits] = useState(false);
-  const lastHitSeq = useRef<number>(0);
-  const hitTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const arenaRef = useRef<HTMLDivElement>(null);
-  const fighterRef = useRef<HTMLDivElement>(null);
-  const [jumpScale, setJumpScale] = useState(1);
 
-  // Measure how far the fighter can rise before leaving the screen. The ceiling
-  // is the top of the viewport, not the underside of the HUD: at the top of a
-  // big jump the head passes behind the health bars for a moment, which reads
-  // fine and leaves the arc nearly intact. Holding it below the HUD instead
-  // would cap a 375px-tall phone at ~75px, which is a hop, not a jump.
-  React.useLayoutEffect(() => {
-    const arena = arenaRef.current;
-    const fighter = fighterRef.current;
-    if (!arena || !fighter) return;
-
-    const measure = () => {
-      // Skip until both boxes are laid out, otherwise we'd latch a scale
-      // derived from a zero height and the jump would flatten.
-      if (!arena.clientHeight || !fighter.offsetHeight) return;
-      const cs = getComputedStyle(arena);
-      // Resting top of the fighter, derived from the arena box and the
-      // fighter's own height — both independent of its current jump offset, so
-      // a resize or rotation mid-jump still measures the resting geometry.
-      const restTop =
-        arena.getBoundingClientRect().bottom -
-        parseFloat(cs.paddingBottom) -
-        fighter.offsetHeight;
-      const headroom = restTop - JUMP_CEILING_GAP;
-      setJumpScale(Math.max(0, Math.min(1, headroom / JUMP_PEAK)));
-    };
-
-    // Observing both boxes re-measures when either settles — the emoji resizes
-    // at the sm/lg breakpoints and once its font loads, and the observer fires
-    // on observe(), so the first reading is taken after layout rather than
-    // during it.
-    const ro = new ResizeObserver(measure);
-    ro.observe(arena);
-    ro.observe(fighter);
-    window.addEventListener('resize', measure);
-    window.addEventListener('orientationchange', measure);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener('resize', measure);
-      window.removeEventListener('orientationchange', measure);
-    };
-  }, [gameStatus, selectedCharacter?.emoji]);
-
+  // Brief wash in the fighter's special colour when they cast their super
+  // (the 3D scene handles the rings / sparks / camera punch-in). Keyed to the
+  // attack counter so every cast flashes once, and its switch-off timer lives
+  // in a ref: nothing else re-running this effect can cancel it (which used to
+  // leave the wash stuck on screen for the rest of the fight).
+  const playerAttackSeq = useGameStore((s) => s.playerAttackSeq);
+  const flashTimer = useRef<ReturnType<typeof setTimeout>>();
   useEffect(() => {
-    if (!hitEvent) return;
-    // Process each hit exactly once (StrictMode double-invokes effects in dev,
-    // which would otherwise re-add an already-exiting number with the same key).
-    if (hitEvent.seq === lastHitSeq.current) return;
-    lastHitSeq.current = hitEvent.seq;
-    const special = hitEvent.move === 'special';
-
-    // Screen shake, bigger on specials
-    const mag = special ? 14 : 7;
-    arenaControls.start({
-      x: [0, -mag, mag, -mag / 2, mag / 2, 0],
-      transition: { duration: special ? 0.4 : 0.25 }
-    });
-
-    // Red flash on the struck fighter. Clear only if this same flash is still
-    // showing, so a newer hit on the other fighter isn't wiped early.
-    const target = hitEvent.target;
-    setFlash(target);
-    const flashTimer = setTimeout(() => setFlash(f => (f === target ? null : f)), 150);
-
-    // Floating damage number on the struck fighter — keep only the latest per
-    // fighter so rapid hits replace rather than pile up into an unreadable smear.
-    const x = target === 'player' ? playerPosition : opponentPosition;
-    const fh: FloatingHit = { id: hitEvent.seq, amount: hitEvent.amount, target, x, special };
-    setFloatingHits(prev => [...prev.filter(h => h.target !== fh.target), fh]);
-    // Each number removes itself by id. Crucially this timer is NOT cleared when
-    // the next hit lands: a following hit on the OTHER fighter would otherwise
-    // cancel this removal and leave the number stuck on screen across rounds.
-    const numTimer = setTimeout(() => {
-      setFloatingHits(prev => prev.filter(h => h.id !== fh.id));
-    }, 550);
-    hitTimers.current.push(flashTimer, numTimer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hitEvent?.seq]);
-
-  // Clear any pending hit timers on unmount, and wipe leftover VFX whenever a
-  // fresh round or match begins so nothing carries over.
-  useEffect(() => () => { hitTimers.current.forEach(clearTimeout); hitTimers.current = []; }, []);
-  useEffect(() => {
-    if (gameStatus === 'intro' || gameStatus === 'ready') {
-      setFloatingHits([]);
-      setFlash(null);
-      setCastFlash(false);
-      setSpecialBurst(null);
-    }
-  }, [gameStatus]);
-
-  // Fire the special-cast burst when the player launches a special. Timers are
-  // NOT cancelled on re-run (currentMove flips back to null at 600ms), so the
-  // flash/burst always clear themselves instead of lingering on screen.
-  useEffect(() => {
-    if (currentMove !== 'special') return;
-    const s = useGameStore.getState();
-    const id = Date.now();
-    setSpecialBurst({ id, x: s.playerPosition, y: s.playerY * jumpScale });
+    if (useGameStore.getState().currentMove !== 'special') return;
     setCastFlash(true);
-    hitTimers.current.push(
-      setTimeout(() => setCastFlash(false), 220),
-      setTimeout(() => setSpecialBurst(b => (b && b.id === id ? null : b)), 800)
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentMove]);
-
-  const getPlayerAnimation = () => {
-    // Face the last-moved direction: default facing "right" is the flipped emoji.
-    const facX = playerFacing === 'right' ? -1 : 1;
-
-    // The loser stays down through the KO beat and the end-of-match result
-    // screen; the round winner does a quick victory hop during the beat only.
-    if (roundLoser === 'player' && koScreen) {
-      return { scaleX: facX, rotate: -78, y: 28, opacity: 0.7, transition: { duration: 0.5, ease: 'backOut' } };
-    }
-    if (gameStatus === 'roundEnd') {
-      return { scaleX: facX, y: [0, -20, 0], transition: { duration: 0.5, repeat: 2, ease: 'easeOut' } };
-    }
-
-    // Explicitly reset rotate/y/opacity here: once the KO pose sets them, an
-    // animation target that omits them would leave the fighter stuck toppled.
-    if (!isAttacking) return { scaleX: facX, rotate: 0, y: 0, opacity: 1 };
-
-    const duration = 0.4;
-
-    switch (currentMove) {
-      case 'punch':
-        return {
-          scaleX: facX,
-          rotate: [0, -15, 0],
-          y: 0,
-          opacity: 1,
-          transition: { duration }
-        };
-      case 'kick':
-        return {
-          scaleX: facX,
-          rotate: [0, 45, 0],
-          y: 0,
-          opacity: 1,
-          transition: { duration }
-        };
-      case 'special':
-        return {
-          scaleX: facX,
-          scaleY: [1, 1.2, 1],
-          rotate: [0, 45, 0],
-          y: 0,
-          opacity: 1,
-          transition: { duration: 0.6 }
-        };
-      default:
-        return { scaleX: facX, rotate: 0, y: 0, opacity: 1 };
-    }
-  };
-
-  const getOpponentAnimation = () => {
-    // The loser stays down through the KO beat and the end-of-match result
-    // screen; the round winner does a quick victory hop during the beat only.
-    if (roundLoser === 'opponent' && koScreen) {
-      return { rotate: 78, y: 28, opacity: 0.7, transition: { duration: 0.5, ease: 'backOut' } };
-    }
-    if (gameStatus === 'roundEnd') {
-      return { y: [0, -20, 0], transition: { duration: 0.5, repeat: 2, ease: 'easeOut' } };
-    }
-
-    // Reset rotate/y/opacity so a fighter that toppled on a KO stands back up
-    // for the next round / match instead of staying rotated.
-    if (!isOpponentAttacking) return { rotate: 0, y: 0, opacity: 1 };
-
-    return {
-      rotate: [0, -20, 0],
-      y: 0,
-      opacity: 1,
-      transition: { duration: 0.4 }
-    };
-  };
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    flashTimer.current = setTimeout(() => setCastFlash(false), 220);
+  }, [playerAttackSeq]);
+  // Never carry a wash across a round change, pause or result screen.
+  useEffect(() => {
+    if (gameStatus !== 'playing') setCastFlash(false);
+  }, [gameStatus]);
+  useEffect(() => () => { if (flashTimer.current) clearTimeout(flashTimer.current); }, []);
 
   useEffect(() => {
     if (!selectedCharacter || !opponent) {
@@ -300,17 +109,16 @@ export default function GameArena() {
       return;
     }
 
-    // Play background music
-    const bgm = new Audio('/assets/fight-bgm.wav');
-    bgm.loop = true;
-    bgm.volume = 0.3;
-    bgm.play().catch(() => {});
-
-    return () => {
-      bgm.pause();
-      bgm.currentTime = 0;
-    };
+    // Each stage has its own theme (src/audio/music.ts), which follows the
+    // Music setting by itself; it stops when leaving the arena.
+    return () => stopMusic();
   }, []);
+
+  // Switch themes when the next fight moves to a new stage.
+  const currentStage = useGameStore((s) => s.currentStage);
+  useEffect(() => {
+    if (selectedCharacter && opponent) playStageMusic(currentStage);
+  }, [currentStage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-pause when the tab/app is backgrounded: stops the loops (saving CPU
   // and battery) and keeps the player from being KO'd while they're away.
@@ -336,14 +144,14 @@ export default function GameArena() {
         action: gameStatus === 'champion' ? 'Gauntlet Cleared' : 'Stage Cleared',
         label: `${selectedCharacter?.name} vs ${opponent?.name}`
       });
-      winSound.current?.play();
+      if (useSettings.getState().sfx) winSound.current?.play();
     } else if (gameStatus === 'lost') {
       ReactGA.event({
         category: 'Game',
         action: 'Game Lost',
         label: `${selectedCharacter?.name} vs ${opponent?.name}`
       });
-      loseSound.current?.play();
+      if (useSettings.getState().sfx) loseSound.current?.play();
     }
   }, [gameStatus]);
 
@@ -357,11 +165,11 @@ export default function GameArena() {
           playMoveSound('punch');
           break;
         case 'k':
-          performMove('kick');
-          playMoveSound('kick');
+          performMove('heavy');
+          playMoveSound('heavy');
           break;
         case 'l':
-          useSpecial();
+          fireSpecial();
           break;
         case 'a':
           setMoveDir(-1);
@@ -391,6 +199,9 @@ export default function GameArena() {
     };
   }, [gameStatus]);
 
+  // Logs the move (and plays the jab's sample). The heavy punch and every
+  // special are synthesized in the 3D scene's event handler, timed to the
+  // swing and impact, for both the player and the AI.
   const playMoveSound = (move: string) => {
     switch (move) {
       case 'punch':
@@ -399,15 +210,13 @@ export default function GameArena() {
           action: 'Move Used',
           label: 'Punch'
         });
-        punchSound.current?.play();
         break;
-      case 'kick':
+      case 'heavy':
         ReactGA.event({
           category: 'Game',
           action: 'Move Used',
-          label: 'Kick'
+          label: 'Heavy Punch'
         });
-        kickSound.current?.play();
         break;
       case 'special':
         ReactGA.event({
@@ -415,7 +224,6 @@ export default function GameArena() {
           action: 'Move Used',
           label: `${selectedCharacter?.specialName}`
         });
-        specialSound.current?.play();
         break;
     }
   };
@@ -424,9 +232,11 @@ export default function GameArena() {
 
   return (
     <div className="relative h-[100dvh] flex flex-col items-center justify-between overflow-hidden">
-      {/* Stage image + ambient blend (memoized: off the per-frame render path) */}
-      <StageBackdrop background={stage?.background} ambientLight={stage?.ambientLight} />
-      
+      {/* The fight itself: a full-screen three.js scene under the DOM HUD. */}
+      <div className="absolute inset-0">
+        <ArenaScene />
+      </div>
+
       <ArenaHud
         player={selectedCharacter}
         opponent={opponent}
@@ -435,6 +245,7 @@ export default function GameArena() {
         playerWins={playerWins}
         opponentWins={opponentWins}
         specialMeter={specialMeter}
+        opponentSpecialMeter={opponentSpecialMeter}
         timer={timer}
         round={round}
         gauntletStage={gauntletStage}
@@ -443,161 +254,12 @@ export default function GameArena() {
         onPause={pauseGame}
       />
 
-      {/* Arena — the bottom inset sets the fighters' ground line. It keeps them
-          standing back on the stage floor instead of at its front lip, and on
-          touch layouts it lifts them clear of the joystick and attack pads. */}
-      <div ref={arenaRef} className="relative flex-1 w-full flex flex-col justify-end pb-10 lg:pb-16">
-        {/* Floor */}
-        <div className={`absolute bottom-0 w-full h-48 ${stage?.floorColor}`} />
-        
-        <motion.div
-          className="relative flex items-end justify-around w-full max-w-4xl mx-auto"
-          animate={arenaControls}
-        >
-          {/* Floating damage numbers — centered over the struck fighter, kept clear of the top HUD */}
-          <AnimatePresence>
-            {floatingHits.map(h => (
-              <motion.div
-                key={h.id}
-                className={`absolute pointer-events-none font-arcade font-bold z-20 ${
-                  h.special ? 'text-yellow-300 text-lg lg:text-4xl' : 'text-red-500 text-base lg:text-3xl'
-                } drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]`}
-                style={{ left: `${h.x}%`, bottom: '90px', x: '-50%' }}
-                initial={{ opacity: 0, y: 0, scale: 0.6 }}
-                animate={{ opacity: 1, y: -25, scale: 1 }}
-                exit={{ opacity: 0, transition: { duration: 0.15 } }}
-                transition={{ duration: 0.4, ease: 'easeOut' }}
-              >
-                -{h.amount}
-              </motion.div>
-            ))}
-          </AnimatePresence>
-
-          <motion.div
-            ref={fighterRef}
-            className="text-[5.5rem] sm:text-[6.5rem] lg:text-[9rem] absolute"
-            style={{
-              left: `${playerPosition}%`,
-              bottom: `${playerY * jumpScale}px`,
-              transition: 'bottom 0.08s linear',
-              filter: flash === 'player'
-                ? 'brightness(1.9) drop-shadow(0 0 22px rgba(255,40,40,0.95))'
-                : chargedGlow
-                ? 'drop-shadow(0 0 22px rgba(216,180,254,0.9))'
-                : 'drop-shadow(0 0 15px rgba(255,255,255,0.5))'
-            }}
-            animate={getPlayerAnimation()}
-            transition={{
-              duration: 0.25,
-              ease: currentMove === 'special' ? "backOut" : "easeInOut"
-            }}
-          >
-            {/* Charged aura — a pulsing halo while the super meter is full. */}
-            {chargedGlow && (
-              <>
-                <motion.span
-                  className="absolute left-1/2 top-1/2 rounded-full pointer-events-none"
-                  style={{ width: '1.15em', height: '1.15em', x: '-50%', y: '-50%',
-                    background: 'radial-gradient(circle, rgba(216,180,254,0.55), rgba(168,85,247,0.15) 55%, transparent 72%)' }}
-                  animate={{ scale: [1, 1.28, 1], opacity: [0.65, 1, 0.65] }}
-                  transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
-                />
-                {[0, 1, 2].map((i) => (
-                  <motion.span
-                    key={i}
-                    className="absolute left-1/2 top-1/2 text-[0.22em] pointer-events-none"
-                    style={{ x: '-50%', y: '-50%' }}
-                    animate={{
-                      rotate: [i * 120, i * 120 + 360],
-                      opacity: [0.4, 1, 0.4],
-                    }}
-                    transition={{ duration: 2.4, repeat: Infinity, ease: 'linear' }}
-                  >
-                    <span className="inline-block" style={{ transform: 'translateY(-0.75em)' }}>✨</span>
-                  </motion.span>
-                ))}
-              </>
-            )}
-            {selectedCharacter.emoji}
-          </motion.div>
-          <motion.div
-            className="text-[5.5rem] sm:text-[6.5rem] lg:text-[9rem] absolute"
-            style={{
-              left: `${opponentPosition}%`,
-              bottom: `${opponentY * jumpScale}px`,
-              transition: 'bottom 0.08s linear',
-              filter: flash === 'opponent'
-                ? 'brightness(1.9) drop-shadow(0 0 22px rgba(255,40,40,0.95))'
-                : 'drop-shadow(0 0 15px rgba(255,255,255,0.5))'
-            }}
-            animate={getOpponentAnimation()}
-            transition={{
-              duration: 0.6,
-              ease: "backOut"
-            }}
-          >
-            {opponent.emoji}
-          </motion.div>
-
-          {/* Special-cast shockwave + sparkle burst at the player. */}
-          <AnimatePresence>
-            {specialBurst && (
-              <div
-                key={specialBurst.id}
-                className="absolute pointer-events-none z-10"
-                style={{ left: `${specialBurst.x}%`, bottom: `${specialBurst.y + 44}px`, transform: 'translateX(-10%)' }}
-              >
-                {/* expanding rings */}
-                {[0, 1].map((i) => (
-                  <motion.span
-                    key={i}
-                    className="absolute rounded-full"
-                    style={{ left: 0, top: 0, x: '-50%', y: '-50%', border: '3px solid rgba(216,180,254,0.9)' }}
-                    initial={{ width: 12, height: 12, opacity: 0.9 }}
-                    animate={{ width: 150 + i * 60, height: 150 + i * 60, opacity: 0 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.55, ease: 'easeOut', delay: i * 0.08 }}
-                  />
-                ))}
-                {/* core flash */}
-                <motion.span
-                  className="absolute rounded-full"
-                  style={{ left: 0, top: 0, x: '-50%', y: '-50%',
-                    background: 'radial-gradient(circle, rgba(255,255,255,0.95), rgba(216,180,254,0.6) 45%, transparent 70%)' }}
-                  initial={{ width: 70, height: 70, opacity: 0.95 }}
-                  animate={{ width: 20, height: 20, opacity: 0 }}
-                  transition={{ duration: 0.35, ease: 'easeOut' }}
-                />
-                {/* sparkle particles flying outward */}
-                {[0, 60, 120, 180, 240, 300].map((deg) => (
-                  <motion.span
-                    key={deg}
-                    className="absolute text-xl lg:text-2xl"
-                    style={{ left: 0, top: 0 }}
-                    initial={{ x: '-50%', y: '-50%', opacity: 1, scale: 0.6 }}
-                    animate={{
-                      x: `calc(-50% + ${Math.cos((deg * Math.PI) / 180) * 70}px)`,
-                      y: `calc(-50% + ${Math.sin((deg * Math.PI) / 180) * 70}px)`,
-                      opacity: 0,
-                      scale: 1.1,
-                    }}
-                    transition={{ duration: 0.6, ease: 'easeOut' }}
-                  >
-                    ✨
-                  </motion.span>
-                ))}
-              </div>
-            )}
-          </AnimatePresence>
-        </motion.div>
-      </div>
-
-      {/* Brief purple wash when a special is cast. */}
+      {/* Brief wash in the fighter's special colour when they cast it. */}
       <AnimatePresence>
         {castFlash && gameStatus === 'playing' && (
           <motion.div
             className="fixed inset-0 pointer-events-none z-30"
-            style={{ background: 'radial-gradient(circle at 50% 60%, rgba(216,180,254,0.35), transparent 65%)' }}
+            style={{ background: `radial-gradient(circle at 50% 60%, ${specialStyleOf(selectedCharacter.id).color}66, transparent 65%)` }}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -630,7 +292,7 @@ export default function GameArena() {
 
       {/* VS intro / loading screen shown before each gauntlet bout */}
       {gameStatus === 'intro' && (
-        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center z-20 px-4">
+        <div className="fixed inset-0 bg-gradient-to-b from-black/70 via-black/35 to-black/70 flex flex-col items-center justify-center z-20 px-4">
           {gauntletOpponents.length > 0 && (
             <motion.div
               initial={{ opacity: 0, y: -20 }}
@@ -685,7 +347,8 @@ export default function GameArena() {
 
       {/* Game Status Overlay */}
       {(gameStatus === 'ready' || gameStatus === 'paused' || gameStatus === 'won' || gameStatus === 'lost' || gameStatus === 'champion') && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-10">
+        // Covers the controls too, so they can't be used during the countdown.
+        <div className={`fixed inset-0 flex items-center justify-center z-10 ${gameStatus === 'paused' ? 'bg-black/60 backdrop-blur-[2px]' : 'bg-black/40'}`}>
           <div className="text-center relative">
             {gameStatus === 'ready' && countdown > 0 && (
               <motion.h2
@@ -706,9 +369,6 @@ export default function GameArena() {
               >
                 FIGHT!
               </motion.h2>
-            )}
-            {gameStatus === 'paused' && (
-              <h2 className="text-4xl mb-4 text-white">PAUSED</h2>
             )}
             {(gameStatus === 'won' || gameStatus === 'lost' || gameStatus === 'champion') && (
               <h2 className="flex flex-col mb-4">
@@ -738,37 +398,30 @@ export default function GameArena() {
               </h2>
             )}
             <div className="flex flex-col gap-3 lg:gap-4 justify-center">
-              {gameStatus === 'paused' && (
-                <>
-                  <button
-                    onClick={resumeGame}
-                    className="px-6 py-3 bg-green-500 rounded-lg flex items-center justify-center gap-2"
-                  >
-                    <Play size={20} />
-                    Resume
-                  </button>
-                  <button
-                    onClick={() => {
-                      resetGame();
-                      navigate('/select');
-                    }}
-                    className="px-6 py-3 bg-red-500 rounded-lg flex items-center justify-center gap-2"
-                  >
-                    <RotateCcw size={20} />
-                    Quit
-                  </button>
-                  <button
-                    onClick={() => setShowCredits(true)}
-                    className="px-6 py-2 text-gray-300 hover:text-white transition-colors flex items-center justify-center gap-2 text-sm font-semibold"
-                  >
-                    <Info size={16} />
-                    Credits
-                  </button>
-                </>
+              {gameStatus === 'paused' && selectedCharacter && opponent && (
+                <PauseMenu
+                  player={selectedCharacter}
+                  opponent={opponent}
+                  fight={gauntletStage + 1}
+                  totalFights={gauntletOpponents.length}
+                  round={round}
+                  onResume={() => {
+                    if (useSettings.getState().fullscreen) enterFullscreen();
+                    resumeGame();
+                  }}
+                  onQuit={() => {
+                    resetGame();
+                    navigate('/select');
+                  }}
+                  onCredits={() => setShowCredits(true)}
+                />
               )}
               {gameStatus === 'won' && (
                 <button
-                  onClick={() => advanceGauntlet()}
+                  onClick={() => {
+                    if (useSettings.getState().fullscreen) enterFullscreen();
+                    advanceGauntlet();
+                  }}
                   className="px-6 py-3 bg-gradient-to-r from-red-600 to-orange-500 rounded-lg font-bold
                            flex justify-center items-center gap-2 active:brightness-110"
                 >
@@ -798,17 +451,18 @@ export default function GameArena() {
       {(gameStatus === 'ready' || gameStatus === 'playing') && (
         <div className="game-controls items-end">
           {/* Movement joystick */}
-          <Joystick onMoveDir={setMoveDir} onJump={() => performMove('jump')} size={116} />
+          <Joystick onMoveDir={setMoveDir} onJump={() => performMove('jump')} size={136} hitPad={28} />
 
           {/* Attack cluster — special as a clearly-visible apex above the
-              punch/kick primary pair (a triangle, no button hidden behind
-              another). */}
-          <div className="relative w-[10rem] h-[8.5rem] shrink-0 select-none">
+              punch / heavy-punch primary pair (a triangle, no button hidden behind
+              another). Buttons fire on touch-down (not release) for snappy
+              inputs, and .touch-pad gives each a larger invisible hit area. */}
+          <div className="relative w-[13rem] h-[10.75rem] shrink-0 select-none">
             {/* Special apex — always visible; the ring fills as the super meter
                 charges and the whole button glows once it's ready. */}
             <motion.button
-              onClick={useSpecial}
-              className="game-button absolute top-0 left-1/2 -translate-x-1/2 w-16 h-16 rounded-full flex items-center justify-center text-2xl overflow-hidden focus:outline-none active:brightness-110"
+              onPointerDown={fireSpecial}
+              className="game-button touch-pad absolute top-0 left-1/2 -translate-x-1/2 w-[4.5rem] h-[4.5rem] rounded-full flex items-center justify-center text-3xl focus:outline-none active:brightness-110"
               style={{
                 background: 'radial-gradient(circle at 50% 35%, #a855f7, #6b21a8)',
                 opacity: specialReady ? 1 : 0.7,
@@ -820,25 +474,27 @@ export default function GameArena() {
               aria-label="Special"
             >
               {/* super meter fill (charged by landing attacks) */}
-              <span
-                className="absolute inset-x-0 bottom-0 bg-purple-200/70 pointer-events-none transition-[height] duration-200"
-                style={{ height: `${specialMeter}%` }}
-              />
+              <span className="absolute inset-0 rounded-full overflow-hidden pointer-events-none">
+                <span
+                  className="absolute inset-x-0 bottom-0 bg-purple-200/70 transition-[height] duration-200"
+                  style={{ height: `${specialMeter}%` }}
+                />
+              </span>
               <span className="relative drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]">✨</span>
             </motion.button>
 
             {/* Punch (primary) */}
             <button
-              onClick={() => { performMove('punch'); playMoveSound('punch'); }}
-              className="game-button absolute bottom-0 left-0.5 w-[4.5rem] h-[4.5rem] rounded-full flex items-center justify-center text-3xl bg-red-500/55 border-2 border-red-300/70 focus:outline-none active:bg-red-600/70"
+              onPointerDown={() => { performMove('punch'); playMoveSound('punch'); }}
+              className="game-button touch-pad absolute bottom-0 left-0 w-[5.5rem] h-[5.5rem] rounded-full flex items-center justify-center text-4xl bg-red-500/55 border-2 border-red-300/70 focus:outline-none active:bg-red-600/70"
               aria-label="Punch"
             >👊</button>
-            {/* Kick (primary) */}
+            {/* Heavy punch (primary) */}
             <button
-              onClick={() => { performMove('kick'); playMoveSound('kick'); }}
-              className="game-button absolute bottom-0 right-0.5 w-[4.5rem] h-[4.5rem] rounded-full flex items-center justify-center text-3xl bg-blue-500/55 border-2 border-blue-300/70 focus:outline-none active:bg-blue-600/70"
-              aria-label="Kick"
-            >🦶</button>
+              onPointerDown={() => { performMove('heavy'); playMoveSound('heavy'); }}
+              className="game-button touch-pad absolute bottom-0 right-0 w-[5.5rem] h-[5.5rem] rounded-full flex items-center justify-center text-4xl bg-blue-500/55 border-2 border-blue-300/70 focus:outline-none active:bg-blue-600/70"
+              aria-label="Heavy punch"
+            >💥</button>
           </div>
         </div>
       )}

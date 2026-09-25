@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pause } from 'lucide-react';
 import { Character } from '../types/game';
+import { ROUND_HP } from '../store/gameStore';
 
 interface ArenaHudProps {
   player: Character;
@@ -10,12 +11,61 @@ interface ArenaHudProps {
   playerWins: number;
   opponentWins: number;
   specialMeter: number;
+  opponentSpecialMeter: number;
   timer: number;
   round: number;
   gauntletStage: number;
   gauntletTotal: number;
   showPause: boolean;
   onPause: () => void;
+}
+
+// Health status colours, shared by both fighters: the bar shifts from green
+// to yellow, orange and finally a pulsing red as it drains.
+const healthColor = (pct: number) =>
+  pct > 60 ? '#22c55e' : pct > 30 ? '#facc15' : pct > 15 ? '#f97316' : '#ef4444';
+
+// One health bar. Both are pinned to the timer (`anchor` is the side facing
+// it) and drain toward it; the colour fades between status stages.
+function HealthBar({ value, anchor }: { value: number; anchor: 'left' | 'right' }) {
+  const pct = Math.max(0, Math.min(100, (value / ROUND_HP) * 100));
+  const critical = pct > 0 && pct <= 15;
+  return (
+    <div
+      className={`h-2.5 sm:h-3.5 bg-gray-800/80 rounded-full overflow-hidden border border-black/40 flex ${
+        anchor === 'right' ? 'justify-end' : 'justify-start'
+      }`}
+    >
+      <div
+        className={`h-full ${critical ? 'animate-pulse' : ''}`}
+        style={{
+          width: `${pct}%`,
+          backgroundColor: healthColor(pct),
+          // A soft top highlight gives the bar a little depth.
+          backgroundImage: 'linear-gradient(to bottom, rgba(255,255,255,0.35), rgba(255,255,255,0) 55%)',
+          transition: 'width 300ms ease-out, background-color 400ms ease',
+        }}
+      />
+    </div>
+  );
+}
+
+// Super meter under a health bar, filling from the fighter's own corner
+// (`anchor`); it glows once full and the special is ready.
+function SuperMeter({ value, anchor }: { value: number; anchor: 'left' | 'right' }) {
+  const ready = value >= 100;
+  return (
+    <div className={`mt-1 h-1.5 bg-gray-800/70 rounded-full overflow-hidden flex ${anchor === 'right' ? 'justify-end' : 'justify-start'}`}>
+      <div
+        className="h-full transition-all duration-200"
+        style={{
+          width: `${value}%`,
+          background: ready ? '#e9d5ff' : `linear-gradient(${anchor === 'right' ? '270deg' : '90deg'},#7c3aed,#c084fc)`,
+          boxShadow: ready ? '0 0 8px rgba(216,180,254,0.9)' : undefined,
+        }}
+      />
+    </div>
+  );
 }
 
 // Top HUD — corner portraits, full-width health bars meeting a central
@@ -30,6 +80,7 @@ function ArenaHudBase({
   playerWins,
   opponentWins,
   specialMeter,
+  opponentSpecialMeter,
   timer,
   round,
   gauntletStage,
@@ -38,6 +89,7 @@ function ArenaHudBase({
   onPause,
 }: ArenaHudProps) {
   const specialReady = specialMeter >= 100;
+  const opponentReady = opponentSpecialMeter >= 100;
 
   return (
     <div className="hud-text relative w-full max-w-5xl mx-auto flex items-start gap-1.5 sm:gap-3 px-2 sm:px-3 pt-2 z-10">
@@ -59,20 +111,8 @@ function ArenaHudBase({
             ))}
           </div>
         </div>
-        <div className="h-2.5 sm:h-3.5 bg-gray-800/80 rounded-full overflow-hidden border border-black/40">
-          <div className="h-full bg-gradient-to-r from-green-400 to-green-500 transition-all duration-300" style={{ width: `${playerHealth}%` }} />
-        </div>
-        {/* super meter (charged by landing attacks) */}
-        <div className="mt-1 h-1.5 bg-gray-800/70 rounded-full overflow-hidden">
-          <div
-            className="h-full transition-all duration-200"
-            style={{
-              width: `${specialMeter}%`,
-              background: specialReady ? '#e9d5ff' : 'linear-gradient(90deg,#7c3aed,#c084fc)',
-              boxShadow: specialReady ? '0 0 8px rgba(216,180,254,0.9)' : undefined,
-            }}
-          />
-        </div>
+        <HealthBar value={playerHealth} anchor="right" />
+        <SuperMeter value={specialMeter} anchor="left" />
       </div>
 
       {/* Central round / timer badge */}
@@ -105,13 +145,15 @@ function ArenaHudBase({
           </div>
           <span className="truncate text-[10px] sm:text-xs font-semibold text-right ml-auto">{opponent.name}</span>
         </div>
-        <div className="h-2.5 sm:h-3.5 bg-gray-800/80 rounded-full overflow-hidden border border-black/40 flex justify-end">
-          <div className="h-full bg-gradient-to-l from-red-400 to-red-500 transition-all duration-300" style={{ width: `${opponentHealth}%` }} />
-        </div>
+        <HealthBar value={opponentHealth} anchor="left" />
+        <SuperMeter value={opponentSpecialMeter} anchor="right" />
       </div>
 
       {/* Opponent portrait */}
-      <div className="shrink-0 w-11 h-11 sm:w-14 sm:h-14 rounded-lg flex items-center justify-center text-2xl sm:text-4xl bg-gray-900/60 backdrop-blur-sm border-2 border-red-500/70">
+      <div
+        className="shrink-0 w-11 h-11 sm:w-14 sm:h-14 rounded-lg flex items-center justify-center text-2xl sm:text-4xl bg-gray-900/60 backdrop-blur-sm transition-colors"
+        style={{ border: `2px solid ${opponentReady ? '#d8b4fe' : 'rgba(239,68,68,0.7)'}` }}
+      >
         {opponent.emoji}
       </div>
     </div>

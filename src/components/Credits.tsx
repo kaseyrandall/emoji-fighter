@@ -1,4 +1,3 @@
-import React from 'react';
 import { motion } from 'framer-motion';
 import { X, Mail, Gamepad2, Globe } from 'lucide-react';
 

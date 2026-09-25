@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { GameState, Character, Move } from '../types/game';
+import { GameState, Character, Move, AttackMove, HitEvent, HitResult } from '../types/game';
 import { characters } from '../data/characters';
 import { stages } from '../data/stages';
 
@@ -25,6 +25,15 @@ const PLAYER_FRICTION = 0.8; // velocity retained per tick when no input
 // AI timing state for the current round (reset when a round's AI loop starts).
 let aiLastAttackAt = 0;
 let aiEnteredRangeAt = 0;
+let aiLastCrossAt = 0;
+// An in-progress AI cross-up: the opponent jumps over the player to land at
+// `target`, drifting `step` units per movement tick while airborne.
+let oppCross: { target: number; step: number } | undefined;
+// Set when the AI decides to back away from the player's special wind-up.
+let oppRetreatUntil = 0;
+// The AI plants its feet while its own special winds up (so the player can
+// get away from it).
+let oppPlantedUntil = 0;
 
 // Single-instance loop handles so a new round never leaves an old loop running
 // (leaked loops would fight over movement and appear to "break" the controls).
@@ -40,30 +49,63 @@ let oppJumpLoop: ReturnType<typeof setInterval> | undefined;
 // The KO beat between a round ending and the next round (or the win/lose
 // screen). Tracked so a quit/reset can cancel it.
 let roundEndTimeout: ReturnType<typeof setTimeout> | undefined;
-const KO_DURATION = 1500;
+const KO_DURATION = 2000; // long enough to see the loser land and lie flat
 const clearRoundLoops = () => {
   if (countdownLoop) { clearInterval(countdownLoop); countdownLoop = undefined; }
   if (roundTimerLoop) { clearInterval(roundTimerLoop); roundTimerLoop = undefined; }
   if (playerJumpLoop) { clearInterval(playerJumpLoop); playerJumpLoop = undefined; }
   if (oppJumpLoop) { clearInterval(oppJumpLoop); oppJumpLoop = undefined; }
+  oppCross = undefined;
+  oppRetreatUntil = 0;
+  oppPlantedUntil = 0;
+  if (oppGuardTimeout) { clearTimeout(oppGuardTimeout); oppGuardTimeout = undefined; }
+  pendingHits.forEach(clearTimeout);
+  pendingHits.clear();
   if (roundEndTimeout) { clearTimeout(roundEndTimeout); roundEndTimeout = undefined; }
 };
 
 // Recovery between the player's own attacks, so mashing can't stack hits and
 // combat has a rhythm instead of a one-sided slam.
 const PLAYER_ATTACK_COOLDOWN = 340;
+// The heavy punch is slow: a wind-up before it lands (matching the 3D
+// uppercut's impact frame) and a long recovery that leaves you open.
+const HEAVY_ATTACK_COOLDOWN = 700;
+const HEAVY_STARTUP_MS = 300;
+// The special spins up before it connects (the 3D thrust lands about 0.3s
+// in), which gives the target a window to back out of range.
+const SPECIAL_STARTUP_MS = 300;
+// Delayed hits (heavy / special wind-ups) in flight; cancelled when a round ends.
+const pendingHits = new Set<ReturnType<typeof setTimeout>>();
+const afterStartup = (move: AttackMove, land: () => void) => {
+  if (move === 'punch') return land();
+  const t = setTimeout(() => {
+    pendingHits.delete(t);
+    if (useGameStore.getState().gameStatus === 'playing') land();
+  }, move === 'heavy' ? HEAVY_STARTUP_MS : SPECIAL_STARTUP_MS);
+  pendingHits.add(t);
+};
 let playerLastAttackAt = 0;
+let playerCooldown = PLAYER_ATTACK_COOLDOWN; // recovery owed by the last attack
 
-// Reach, in position units (fighters are ~12 units wide). Punches/kicks only
+// Reach, in position units (fighters are ~12 units wide). Punches only
 // connect at near-contact; the special reaches a little further. The AI uses
 // HIT_RANGE to decide it's close enough to start throwing attacks.
 const HIT_RANGE = 15;
-const SPECIAL_RANGE = 19;
+// Closest the two fighters can get on the ground (bodies are ~12 units wide),
+// so they bump into each other instead of walking through. Jumping clears it.
+const MIN_SEPARATION = 11;
+// Knock `victim` away from `attacker` (whichever side they're on now that
+// fighters can cross over), staying inside the arena.
+const knockAway = (victim: number, attacker: number, amount: number) =>
+  Math.max(POS_MIN, Math.min(POS_MAX, victim + (Math.sign(victim - attacker) || 1) * amount));
+// Checked when the special connects, not when it's thrown: a target that
+// backs off during the wind-up escapes it.
+const SPECIAL_RANGE = 20;
 
-// Super meter: landing punches/kicks charges it; the special can only fire when
+// Super meter: landing punches charges it; the special can only fire when
 // it's full, then it's spent. A full-meter special hits harder than a raw one.
 const SPECIAL_METER_MAX = 100;
-const SPECIAL_GAIN = 20; // meter gained per landed punch/kick
+const SPECIAL_GAIN = 20; // meter gained per landed punch / heavy punch
 const SPECIAL_SUPER_MULT = 1.4;
 
 // Difficulty ramps with the gauntlet stage: early fights are slow and gentle,
@@ -77,12 +119,17 @@ interface Difficulty {
 }
 
 const difficultyForStage = (stage: number): Difficulty => ({
-  attackChance: Math.min(0.14, 0.035 + stage * 0.02),
-  moveSpeed: Math.min(4, 2 + stage * 0.35),
-  damageMult: Math.min(1.3, 0.8 + stage * 0.09),
-  cooldownMs: Math.max(320, 850 - stage * 90),
-  reactionMs: Math.max(0, 500 - stage * 90),
+  attackChance: Math.min(0.16, 0.05 + stage * 0.022),
+  moveSpeed: Math.min(4.3, 2.3 + stage * 0.35),
+  damageMult: Math.min(1.35, 0.9 + stage * 0.09),
+  cooldownMs: Math.max(300, 760 - stage * 85),
+  reactionMs: Math.max(0, 400 - stage * 85),
 });
+
+// Every fighter's health is scaled up so rounds last a good while longer.
+const HP_MULT = 1.75;
+export const ROUND_HP = 100 * HP_MULT; // full health bar
+const roundHp = (health?: number) => Math.round((health || 100) * HP_MULT);
 
 // A player-chosen base difficulty shifts the whole curve up or down.
 export type DifficultyLevel = 'Easy' | 'Normal' | 'Hard';
@@ -98,12 +145,77 @@ const shuffle = <T,>(arr: T[]): T[] => {
   return copy;
 };
 
-const randomStageId = () => stages[Math.floor(Math.random() * stages.length)].id;
+// Stages are dealt from a shuffled deck so a gauntlet run sees every stage
+// before any repeats (and never the same one twice in a row).
+let stageDeck: string[] = [];
+let lastStageId = '';
+const nextStageId = (freshRun = false) => {
+  if (freshRun) stageDeck = [];
+  if (stageDeck.length === 0) {
+    stageDeck = shuffle(stages.map((st) => st.id));
+    if (stageDeck.length > 1 && stageDeck[stageDeck.length - 1] === lastStageId) {
+      [stageDeck[0], stageDeck[stageDeck.length - 1]] = [stageDeck[stageDeck.length - 1], stageDeck[0]];
+    }
+  }
+  lastStageId = stageDeck.pop()!;
+  return lastStageId;
+};
 
 // Peak of the jump arc, in px. The arena scales this down when a short
 // viewport can't fit the whole arc (see jumpScale in GameArena).
 export const JUMP_PEAK = 230;
 const JUMP_STEP = 16;
+// The player's jump: a parabola lasting this many 16ms ticks (~0.64s), with a
+// small speed boost when taking off in a direction.
+const PLAYER_JUMP_TICKS = 40;
+const JUMP_SPEED_BOOST = 1.1;
+// Horizontal momentum kept per tick in the air with no input (vs
+// PLAYER_FRICTION on the ground), so a jump carries its speed.
+const AIR_FRICTION = 0.97;
+// Above this height a fighter is "over" the other one and can pass across.
+const CLEAR_HEIGHT = JUMP_PEAK * 0.2;
+// Jump dodging: attacks only reach so far vertically. A jab needs both
+// fighters at roughly the same height, so jumping clears it. The uppercut
+// reaches up (a jumper coming in can be anti-aired) but not down. Specials
+// are big enough to catch anyone.
+const DODGE_HEIGHT = JUMP_PEAK * 0.35;
+const reaches = (move: AttackMove, attackerY: number, targetY: number) =>
+  move === 'special' ||
+  (move === 'punch' && Math.abs(attackerY - targetY) <= DODGE_HEIGHT) ||
+  (move === 'heavy' && targetY - attackerY >= -DODGE_HEIGHT);
+
+// Blocking: guarded attacks deal only chip damage and barely push back.
+const BLOCK_CHIP = 0.2;
+const SPECIAL_BLOCK_CHIP = 0.35;
+const BLOCK_KNOCKBACK = 2;
+const OPP_GUARD_MS = 380; // how long the AI's guard pose shows after a block
+
+// The player blocks by holding away from the opponent while on the ground
+// (they can still back-pedal at the same time, as in any fighting game).
+export const isPlayerBlocking = (s: { gameStatus: string; playerY: number; moveDir: number; playerPosition: number; opponentPosition: number }) =>
+  s.gameStatus === 'playing' &&
+  s.playerY < 1 &&
+  s.moveDir !== 0 &&
+  Math.sign(s.moveDir) === (Math.sign(s.playerPosition - s.opponentPosition) || -1);
+
+// The AI's odds of blocking a given attack rise through the gauntlet.
+const aiBlockChance = (stage: number) => Math.max(0, Math.min(0.5, 0.12 + stage * 0.07));
+let oppGuardTimeout: ReturnType<typeof setTimeout> | undefined;
+const AI_SWING_MS = 280; // the AI can't guard this soon after throwing an attack
+// How often the AI answers a jumping player with the anti-air uppercut.
+// Once its meter is full, the odds the AI cashes it in on a given attack.
+const aiSpecialChance = (stage: number) => Math.max(0.35, Math.min(0.85, 0.35 + stage * 0.1));
+// Chance the AI reads the player's special wind-up and backs out of range.
+const aiEvadeChance = (stage: number) => Math.max(0.1, Math.min(0.55, 0.15 + stage * 0.08));
+const aiAntiAirChance = (stage: number) => Math.max(0.2, Math.min(0.75, 0.3 + stage * 0.09));
+
+// The opponent's jump arc, and how many 16ms ticks it spends in the air.
+const OPP_JUMP_PEAK = JUMP_PEAK * 0.85;
+const OPP_JUMP_TICKS = 2 * Math.ceil(OPP_JUMP_PEAK / JUMP_STEP);
+// AI cross-ups: how far past the player it lands, and the minimum gap
+// between two of them (shrinks as the gauntlet gets harder).
+const CROSS_UP_LAND = 14;
+const crossUpGapMs = (stage: number) => Math.max(1800, 4000 - stage * 400);
 
 // State shared by startGauntlet / advanceGauntlet when a fresh bout begins.
 // Bouts open on the 'intro' VS screen; the arena starts the countdown after it.
@@ -128,6 +240,9 @@ const freshBout = () => ({
   moveDir: 0,
   playerVel: 0,
   specialMeter: 0,
+  opponentSpecialMeter: 0,
+  opponentMove: null,
+  opponentBlocking: false,
 });
 
 interface GameStore extends GameState {
@@ -141,6 +256,8 @@ interface GameStore extends GameState {
   playerVel: number;
   setMoveDir: (dir: number) => void;
   specialMeter: number;
+  // The AI's super meter: charged and spent exactly like the player's.
+  opponentSpecialMeter: number;
   performMove: (move: Move) => void;
   performSpecial: () => void;
   endRound: (winner: 'player' | 'opponent') => void;
@@ -152,6 +269,14 @@ interface GameStore extends GameState {
   opponentPosition: number;
   isAttacking: boolean;
   isOpponentAttacking: boolean;
+  // The AI is showing its guard (it just blocked an attack).
+  opponentBlocking: boolean;
+  // Which attack the opponent is throwing (drives its 3D swing animation).
+  opponentMove: AttackMove | null;
+  // Bumped once per attack thrown, so the 3D rigs can start a swing on each
+  // new attack — even when two land inside the same 600ms isAttacking window.
+  playerAttackSeq: number;
+  opponentAttackSeq: number;
   setAttacking: (value: boolean) => void;
   startCountdown: () => void;
   opponentAttack: () => void;
@@ -159,13 +284,58 @@ interface GameStore extends GameState {
   playerPhysics: () => void;
 }
 
+// Damage a guarded attack still deals.
+const chip = (move: AttackMove, damage: number) =>
+  Math.max(1, Math.round(damage * (move === 'special' ? SPECIAL_BLOCK_CHIP : BLOCK_CHIP)));
+
+// Resolve a player attack that's already in horizontal range: it may be
+// jump-dodged, blocked by the AI, or land. Applies damage/knockback, emits the
+// hit event, ends the round on a KO, and returns how it resolved.
+function resolveOnOpponent(move: AttackMove, damage: number, knockback: number): HitResult {
+  const { getState: get, setState: set } = useGameStore;
+  const s = get();
+  if (!reaches(move, s.playerY, s.opponentY)) {
+    set({ hitEvent: { target: 'opponent', amount: 0, move, seq: nextHit(), result: 'dodged' } });
+    return 'dodged';
+  }
+
+  // The AI can only guard on the ground and not in the middle of a swing.
+  const stage = s.gauntletStage + DIFF_OFFSET[s.difficulty];
+  const midSwing = Date.now() - aiLastAttackAt < AI_SWING_MS;
+  const blocked = s.opponentY < 1 && !midSwing && Math.random() < aiBlockChance(stage);
+  const dealt = blocked ? chip(move, damage) : damage;
+  const opponentHealth = Math.max(0, s.opponentHealth - dealt);
+  const opponentPosition = knockAway(s.opponentPosition, s.playerPosition, blocked ? BLOCK_KNOCKBACK : knockback);
+  const result: HitResult = blocked ? 'blocked' : 'hit';
+  const hitEvent: HitEvent = { target: 'opponent', amount: dealt, move, seq: nextHit(), result };
+
+  if (blocked) {
+    if (oppGuardTimeout) clearTimeout(oppGuardTimeout);
+    oppGuardTimeout = setTimeout(() => set({ opponentBlocking: false }), OPP_GUARD_MS);
+  }
+  set({ opponentHealth, opponentPosition, hitEvent, opponentBlocking: blocked });
+  if (opponentHealth <= 0) get().endRound('player');
+  return result;
+}
+
+// Clear the player's attack pose 600ms after it's thrown — but only if no
+// newer attack has started since. (An unconditional reset let a punch's timer
+// wipe out a special thrown just after it, mid-swing.)
+function endAttackLater(seq: number) {
+  setTimeout(() => {
+    if (useGameStore.getState().playerAttackSeq === seq) {
+      useGameStore.setState({ isAttacking: false, currentMove: null });
+    }
+  }, 600);
+}
+
 export const useGameStore = create<GameStore>((set) => ({
   selectedCharacter: null,
   opponent: null,
   difficulty: 'Normal',
   setDifficulty: (level) => set({ difficulty: level }),
-  playerHealth: 100,
-  opponentHealth: 100,
+  playerHealth: ROUND_HP,
+  opponentHealth: ROUND_HP,
   gameStatus: 'ready',
   round: 1,
   roundLoser: null,
@@ -189,6 +359,11 @@ export const useGameStore = create<GameStore>((set) => ({
   moveDir: 0,
   playerVel: 0,
   specialMeter: 0,
+  opponentSpecialMeter: 0,
+  opponentMove: null,
+  opponentBlocking: false,
+  playerAttackSeq: 0,
+  opponentAttackSeq: 0,
   setMoveDir: (dir) => set({ moveDir: Math.max(-1, Math.min(1, dir)) }),
   setAttacking: (value) => set({ isAttacking: value }),
 
@@ -199,7 +374,7 @@ export const useGameStore = create<GameStore>((set) => ({
       (char) => char.id !== (useGameStore.getState().selectedCharacter?.id)
     );
     const randomOpponent = availableOpponents[Math.floor(Math.random() * availableOpponents.length)];
-    set({ opponent: randomOpponent, currentStage: randomStageId() });
+    set({ opponent: randomOpponent, currentStage: nextStageId() });
   },
 
   // Build the ladder of opponents and start the first bout.
@@ -211,9 +386,9 @@ export const useGameStore = create<GameStore>((set) => ({
       gauntletOpponents: ladder,
       gauntletStage: 0,
       opponent: ladder[0],
-      currentStage: randomStageId(),
-      playerHealth: character.health,
-      opponentHealth: ladder[0].health,
+      currentStage: nextStageId(true),
+      playerHealth: roundHp(character.health),
+      opponentHealth: roundHp(ladder[0].health),
       ...freshBout(),
     });
   },
@@ -232,9 +407,9 @@ export const useGameStore = create<GameStore>((set) => ({
     set({
       gauntletStage: nextStage,
       opponent: nextOpponent,
-      currentStage: randomStageId(),
-      playerHealth: state.selectedCharacter?.health || 100,
-      opponentHealth: nextOpponent.health,
+      currentStage: nextStageId(),
+      playerHealth: roundHp(state.selectedCharacter?.health),
+      opponentHealth: roundHp(nextOpponent.health),
       ...freshBout(),
     });
     // The arena shows the VS intro, then starts the countdown.
@@ -255,60 +430,58 @@ export const useGameStore = create<GameStore>((set) => ({
       return;
     }
     if (move === 'jump' && !state.isJumping) {
-      set({ isJumping: true });
+      // Jumping while holding a direction commits to it at full speed, so a
+      // jump toward the opponent reliably carries you over them.
+      const takeoffVel = state.moveDir !== 0 ? Math.sign(state.moveDir) * PLAYER_MAX_SPEED * JUMP_SPEED_BOOST : state.playerVel;
+      set({ isJumping: true, playerVel: takeoffVel });
 
-      // One tracked arc (up then down). It bails if the round ends mid-jump so
-      // it can't keep writing playerY into the next round's reset.
+      // One tracked parabolic arc. It bails if the round ends mid-jump so it
+      // can't keep writing playerY into the next round's reset.
       if (playerJumpLoop) clearInterval(playerJumpLoop);
-      let h = 0;
-      let dir = 1;
+      let tick = 0;
       playerJumpLoop = setInterval(() => {
+        // Paused: hold still, keeping the loop alive until resumed.
+        if (useGameStore.getState().gameStatus === 'paused') return;
         if (useGameStore.getState().gameStatus !== 'playing') {
           if (playerJumpLoop) { clearInterval(playerJumpLoop); playerJumpLoop = undefined; }
           return;
         }
-        h += dir * JUMP_STEP;
-        if (h >= JUMP_PEAK) { h = JUMP_PEAK; dir = -1; }
-        if (h <= 0) {
+        tick++;
+        if (tick >= PLAYER_JUMP_TICKS) {
           if (playerJumpLoop) { clearInterval(playerJumpLoop); playerJumpLoop = undefined; }
           set({ playerY: 0, isJumping: false });
           return;
         }
-        set({ playerY: h });
+        const x = tick / PLAYER_JUMP_TICKS;
+        set({ playerY: JUMP_PEAK * 4 * x * (1 - x) });
       }, 16);
 
       return;
     }
 
-    // Attacks (punch / kick / special) — enforce a recovery window.
+    // Attacks (punch / heavy / special) — enforce a recovery window.
     const nowAttack = Date.now();
-    if (nowAttack - playerLastAttackAt < PLAYER_ATTACK_COOLDOWN) return;
+    if (nowAttack - playerLastAttackAt < playerCooldown) return;
     playerLastAttackAt = nowAttack;
+    playerCooldown = move === 'heavy' ? HEAVY_ATTACK_COOLDOWN : PLAYER_ATTACK_COOLDOWN;
 
-    set({ isAttacking: true, currentMove: move });
-    setTimeout(() => set({ isAttacking: false, currentMove: null }), 600);
+    set({ isAttacking: true, currentMove: move, playerAttackSeq: state.playerAttackSeq + 1 });
+    endAttackLater(useGameStore.getState().playerAttackSeq);
 
-    // Check if characters are close enough for hit detection
+    // The hit is checked when the blow lands (after the heavy's wind-up),
+    // against where both fighters are at that moment.
+    const attack = move as AttackMove;
+    afterStartup(attack, () => {
+      const now = useGameStore.getState();
+      const distance = Math.abs(now.playerPosition - now.opponentPosition);
+      if (distance > HIT_RANGE) return; // No damage if too far apart
 
-    const distance = Math.abs(state.playerPosition - state.opponentPosition);
-    if (distance > HIT_RANGE) return; // No damage if too far apart
-
-    const damage = state.selectedCharacter?.moves[move] || 0;
-    const newOpponentHealth = Math.max(0, state.opponentHealth - damage);
-    const hitEvent = { target: 'opponent' as const, amount: damage, move, seq: nextHit() };
-
-    // Knock the opponent back a touch on hit.
-    const knockedPosition = Math.min(POS_MAX, state.opponentPosition + 4);
-    // Landing an attack charges the super meter.
-    const specialMeter = Math.min(SPECIAL_METER_MAX, state.specialMeter + SPECIAL_GAIN);
-
-    if (newOpponentHealth <= 0) {
-      set({ opponentHealth: 0, opponentPosition: knockedPosition, hitEvent, specialMeter });
-      useGameStore.getState().endRound('player');
-      return;
-    }
-
-    set({ opponentHealth: newOpponentHealth, opponentPosition: knockedPosition, hitEvent, specialMeter });
+      const base = now.selectedCharacter?.moves[attack] || 0;
+      // Landing an attack charges the super meter (half as much when blocked).
+      const gain = (r: HitResult) => (r === 'hit' ? SPECIAL_GAIN : r === 'blocked' ? SPECIAL_GAIN / 2 : 0);
+      const result = resolveOnOpponent(attack, base, 4);
+      set({ specialMeter: Math.min(SPECIAL_METER_MAX, useGameStore.getState().specialMeter + gain(result)) });
+    });
   },
 
   // The special is a super: usable only when the meter is full (charged by
@@ -319,61 +492,95 @@ export const useGameStore = create<GameStore>((set) => ({
     if (state.specialMeter < SPECIAL_METER_MAX) return; // not charged yet
 
     const now = Date.now();
-    if (now - playerLastAttackAt < PLAYER_ATTACK_COOLDOWN) return;
+    if (now - playerLastAttackAt < playerCooldown) return;
     playerLastAttackAt = now;
+    playerCooldown = PLAYER_ATTACK_COOLDOWN;
 
     // Spend the meter on activation.
-    set({ isAttacking: true, currentMove: 'special', specialMeter: 0 });
-    setTimeout(() => set({ isAttacking: false, currentMove: null }), 600);
+    set({ isAttacking: true, currentMove: 'special', specialMeter: 0, playerAttackSeq: state.playerAttackSeq + 1 });
+    endAttackLater(useGameStore.getState().playerAttackSeq);
 
-    const distance = Math.abs(state.playerPosition - state.opponentPosition);
-    if (distance > SPECIAL_RANGE) return;
+    // Sometimes the AI sees it coming and backs off during the wind-up.
+    const stage = state.gauntletStage + DIFF_OFFSET[state.difficulty];
+    if (state.opponentY < 1 && Math.random() < aiEvadeChance(stage)) oppRetreatUntil = now + SPECIAL_STARTUP_MS + 150;
 
-    const base = state.selectedCharacter?.moves.special || 0;
-    const damage = Math.round(base * SPECIAL_SUPER_MULT);
-    const newOpponentHealth = Math.max(0, state.opponentHealth - damage);
-    const hitEvent = { target: 'opponent' as const, amount: damage, move: 'special' as const, seq: nextHit() };
-
-    const knockedPosition = Math.min(POS_MAX, state.opponentPosition + 14);
-
-    if (newOpponentHealth <= 0) {
-      set({ opponentHealth: 0, opponentPosition: knockedPosition, hitEvent });
-      useGameStore.getState().endRound('player');
-      return;
-    }
-    set({ opponentHealth: newOpponentHealth, opponentPosition: knockedPosition, hitEvent });
+    afterStartup('special', () => {
+      const s = useGameStore.getState();
+      if (Math.abs(s.playerPosition - s.opponentPosition) > SPECIAL_RANGE) {
+        set({ hitEvent: { target: 'opponent', amount: 0, move: 'special', seq: nextHit(), result: 'dodged' } });
+        return;
+      }
+      const base = s.selectedCharacter?.moves.special || 0;
+      resolveOnOpponent('special', Math.round(base * SPECIAL_SUPER_MULT), 14);
+    });
   },
 
   opponentAttack: () => {
     const state = useGameStore.getState();
     if (state.gameStatus !== 'playing') return;
 
-    const moves: Move[] = ['punch', 'kick', 'special'];
-    const randomMove = moves[Math.floor(Math.random() * moves.length)];
+    // Against a jumping player, the AI reaches for the anti-air uppercut —
+    // rarely early in the gauntlet, most of the time near the end. Like the
+    // player, it can only throw its special once its super meter is full.
+    const stage = state.gauntletStage + DIFF_OFFSET[state.difficulty];
+    const charged = state.opponentSpecialMeter >= SPECIAL_METER_MAX;
+    const randomMove: AttackMove = state.playerY > DODGE_HEIGHT && Math.random() < aiAntiAirChance(stage)
+      ? 'heavy'
+      : charged && Math.random() < aiSpecialChance(stage)
+      ? 'special'
+      : Math.random() < 0.6 ? 'punch' : 'heavy';
 
-    set({ isOpponentAttacking: true });
+    set({
+      isOpponentAttacking: true,
+      opponentMove: randomMove,
+      opponentAttackSeq: state.opponentAttackSeq + 1,
+      // The special spends the whole meter as it's thrown, hit or miss.
+      ...(randomMove === 'special' ? { opponentSpecialMeter: 0 } : {}),
+    });
+    if (randomMove === 'special') oppPlantedUntil = Date.now() + SPECIAL_STARTUP_MS;
     setTimeout(() => set({ isOpponentAttacking: false }), 600);
 
-    // Check if characters are close enough for hit detection
-    const distance = Math.abs(state.playerPosition - state.opponentPosition);
-    if (distance > HIT_RANGE) return; // No damage if too far apart
+    // Resolved when the blow lands (after the heavy's wind-up), against
+    // where both fighters are at that moment.
+    afterStartup(randomMove, () => {
+      const state = useGameStore.getState();
+      const special = randomMove === 'special';
+      const distance = Math.abs(state.playerPosition - state.opponentPosition);
+      if (special && distance > SPECIAL_RANGE) {
+        // The player got out of range during the wind-up.
+        set({ hitEvent: { target: 'player', amount: 0, move: 'special', seq: nextHit(), result: 'dodged' } });
+        return;
+      }
+      if (!special && distance > HIT_RANGE) return; // No damage if too far apart
 
-    const { damageMult } = difficultyForStage(state.gauntletStage + DIFF_OFFSET[state.difficulty]);
-    const baseDamage = state.opponent?.moves[randomMove] || 0;
-    const damage = Math.round(baseDamage * damageMult);
-    const newPlayerHealth = Math.max(0, state.playerHealth - damage);
-    const hitEvent = { target: 'player' as const, amount: damage, move: randomMove, seq: nextHit() };
+      if (!reaches(randomMove, state.opponentY, state.playerY)) {
+        set({ hitEvent: { target: 'player', amount: 0, move: randomMove, seq: nextHit(), result: 'dodged' } });
+        return;
+      }
 
-    // Knock the player back a touch on hit.
-    const knockback = randomMove === 'special' ? 8 : 4;
-    const knockedPosition = Math.max(POS_MIN, state.playerPosition - knockback);
+      // The same super as the player's: a full-meter special hits harder.
+      const { damageMult } = difficultyForStage(state.gauntletStage + DIFF_OFFSET[state.difficulty]);
+      const baseDamage = Math.round((state.opponent?.moves[randomMove] || 0) * damageMult * (special ? SPECIAL_SUPER_MULT : 1));
+      const blocked = isPlayerBlocking(state);
+      const damage = blocked ? chip(randomMove, baseDamage) : baseDamage;
+      const hitEvent: HitEvent = { target: 'player', amount: damage, move: randomMove, seq: nextHit(), result: blocked ? 'blocked' : 'hit' };
 
-    if (newPlayerHealth <= 0) {
-      set({ playerHealth: 0, playerPosition: knockedPosition, hitEvent });
-      useGameStore.getState().endRound('opponent');
-    } else {
-      set({ playerHealth: newPlayerHealth, playerPosition: knockedPosition, hitEvent });
-    }
+      // Knock the player back (just a nudge when guarded).
+      const knockback = blocked ? BLOCK_KNOCKBACK : special ? 14 : 4;
+      const knockedPosition = knockAway(state.playerPosition, state.opponentPosition, knockback);
+      const newPlayerHealth = Math.max(0, state.playerHealth - damage);
+      // Landing a punch charges the AI's meter, half as much when blocked,
+      // exactly as for the player (a special charges nothing).
+      const gain = special ? 0 : blocked ? SPECIAL_GAIN / 2 : SPECIAL_GAIN;
+      const opponentSpecialMeter = Math.min(SPECIAL_METER_MAX, state.opponentSpecialMeter + gain);
+
+      if (newPlayerHealth <= 0) {
+        set({ playerHealth: 0, playerPosition: knockedPosition, hitEvent, opponentSpecialMeter });
+        useGameStore.getState().endRound('opponent');
+      } else {
+        set({ playerHealth: newPlayerHealth, playerPosition: knockedPosition, hitEvent, opponentSpecialMeter });
+      }
+    });
   },
 
   opponentAI: () => {
@@ -383,17 +590,21 @@ export const useGameStore = create<GameStore>((set) => ({
     // Reset per-round attack timing so each bout starts with a fair reaction window.
     aiLastAttackAt = 0;
     aiEnteredRangeAt = 0;
+    aiLastCrossAt = Date.now(); // no cross-up in the opening moments
+    oppCross = undefined;
 
     // A tracked arc for the opponent, mirroring the player's jump. Guarded so
     // only one runs at a time and it stops if the round ends mid-air.
-    const OPP_JUMP_PEAK = JUMP_PEAK * 0.85;
     const startOppJump = () => {
       if (oppJumpLoop) return; // already airborne
       let h = 0;
       let dir = 1;
       oppJumpLoop = setInterval(() => {
+        // Paused: hold still, keeping the loop alive until resumed.
+        if (useGameStore.getState().gameStatus === 'paused') return;
         if (useGameStore.getState().gameStatus !== 'playing') {
           if (oppJumpLoop) { clearInterval(oppJumpLoop); oppJumpLoop = undefined; }
+          oppCross = undefined;
           set({ opponentY: 0 });
           return;
         }
@@ -401,6 +612,7 @@ export const useGameStore = create<GameStore>((set) => ({
         if (h >= OPP_JUMP_PEAK) { h = OPP_JUMP_PEAK; dir = -1; }
         if (h <= 0) {
           if (oppJumpLoop) { clearInterval(oppJumpLoop); oppJumpLoop = undefined; }
+          oppCross = undefined;
           set({ opponentY: 0 });
           return;
         }
@@ -410,6 +622,8 @@ export const useGameStore = create<GameStore>((set) => ({
 
     const runAI = () => {
       const state = useGameStore.getState();
+      // Paused: hold still, keeping the loop alive until resumed.
+      if (state.gameStatus === 'paused') return;
       if (state.gameStatus !== 'playing') {
         if (aiLoop) { clearInterval(aiLoop); aiLoop = undefined; }
         return;
@@ -439,6 +653,24 @@ export const useGameStore = create<GameStore>((set) => ({
       const reacted = now - aiEnteredRangeAt >= diff.reactionMs;
       const offCooldown = now - aiLastAttackAt >= diff.cooldownMs;
 
+      // Mid cross-up: no attacks until it has landed on the other side.
+      if (oppCross) return;
+
+      // Now and then, jump right over the player and land behind them —
+      // more often, and sooner after the last one, as the gauntlet climbs.
+      const crossChance = Math.max(0, Math.min(0.03, 0.006 + stage * 0.004));
+      if (!airborne && reacted && now - aiLastCrossAt >= crossUpGapMs(stage) && Math.random() < crossChance) {
+        const dir = Math.sign(state.playerPosition - state.opponentPosition) || 1;
+        const target = state.playerPosition + dir * CROSS_UP_LAND;
+        // Only if there's room to land behind the player (not pinned to a wall).
+        if (target >= POS_MIN && target <= POS_MAX) {
+          aiLastCrossAt = now;
+          oppCross = { target, step: Math.abs(target - state.opponentPosition) / (OPP_JUMP_TICKS - 2) };
+          startOppJump();
+          return;
+        }
+      }
+
       // React to the player leaping: contest the air / anti-air by jumping too.
       if (!airborne && playerAirborne && Math.random() < jumpChance * 2) {
         startOppJump();
@@ -466,6 +698,8 @@ export const useGameStore = create<GameStore>((set) => ({
     if (physicsLoop) clearInterval(physicsLoop);
     physicsLoop = setInterval(() => {
       const s = useGameStore.getState();
+      // Paused: hold still, keeping the loop alive until resumed.
+      if (s.gameStatus === 'paused') return;
       if (s.gameStatus !== 'playing') {
         if (physicsLoop) { clearInterval(physicsLoop); physicsLoop = undefined; }
         return;
@@ -475,17 +709,41 @@ export const useGameStore = create<GameStore>((set) => ({
       const target = s.moveDir * PLAYER_MAX_SPEED;
       let vel = s.moveDir !== 0
         ? s.playerVel + (target - s.playerVel) * PLAYER_ACCEL
-        : s.playerVel * PLAYER_FRICTION;
+        : s.playerVel * (s.playerY > 0 ? AIR_FRICTION : PLAYER_FRICTION);
       if (Math.abs(vel) < 0.02) vel = 0;
 
       let pos = s.playerPosition + vel;
       if (pos <= POS_MIN) { pos = POS_MIN; vel = 0; }
       if (pos >= POS_MAX) { pos = POS_MAX; vel = 0; }
 
-      // Opponent approach at the same 60fps cadence (moveSpeed is tuned per
-      // 50ms, so scale it down to this tick).
+      // Fighters are solid on the ground: walking into the opponent pushes
+      // up against them. While either one is in the air they can pass, so a
+      // jump carries the player over to the other side. Any overlap left on
+      // landing is pushed apart on whichever side of the opponent's centre
+      // the player came down on — short of the centre, you didn't make it.
       let oppPos = s.opponentPosition;
-      if (Math.abs(pos - oppPos) > HIT_RANGE) {
+      const airborne = s.playerY > CLEAR_HEIGHT || s.opponentY > CLEAR_HEIGHT;
+      if (!airborne && Math.abs(pos - oppPos) < MIN_SEPARATION) {
+        const side = Math.sign(pos - oppPos) || (s.playerPosition <= oppPos ? -1 : 1);
+        pos = oppPos + side * MIN_SEPARATION;
+        // Pinned against a wall: shove the opponent out instead.
+        if (pos < POS_MIN || pos > POS_MAX) {
+          pos = Math.max(POS_MIN, Math.min(POS_MAX, pos));
+          oppPos = pos - side * MIN_SEPARATION;
+        }
+      }
+
+      // Opponent: mid cross-up it drifts over the player toward its landing
+      // spot; otherwise it approaches at the same 60fps cadence (moveSpeed is
+      // tuned per 50ms, so scale it down to this tick).
+      if (oppCross) {
+        const d = oppCross.target - oppPos;
+        oppPos = Math.max(POS_MIN, Math.min(POS_MAX, oppPos + Math.sign(d) * Math.min(Math.abs(d), oppCross.step)));
+      } else if (Date.now() < oppRetreatUntil) {
+        const diff = difficultyForStage(s.gauntletStage + DIFF_OFFSET[s.difficulty]);
+        const away = Math.sign(oppPos - pos) || 1;
+        oppPos = Math.max(POS_MIN, Math.min(POS_MAX, oppPos + away * diff.moveSpeed * 1.3 * (MOVE_TICK_MS / 50)));
+      } else if (Math.abs(pos - oppPos) > HIT_RANGE && Date.now() >= oppPlantedUntil) {
         const diff = difficultyForStage(s.gauntletStage + DIFF_OFFSET[s.difficulty]);
         const oppStep = diff.moveSpeed * (MOVE_TICK_MS / 50);
         oppPos = pos < oppPos
@@ -524,6 +782,8 @@ export const useGameStore = create<GameStore>((set) => ({
       if (roundTimerLoop) clearInterval(roundTimerLoop);
       roundTimerLoop = setInterval(() => {
         const s = useGameStore.getState();
+        // Paused: hold still, keeping the loop alive until resumed.
+        if (s.gameStatus === 'paused') return;
         if (s.gameStatus !== 'playing') {
           if (roundTimerLoop) { clearInterval(roundTimerLoop); roundTimerLoop = undefined; }
           return;
@@ -564,8 +824,8 @@ export const useGameStore = create<GameStore>((set) => ({
     // Stop the round timer/countdown/AI/physics immediately.
     clearRoundLoops();
 
-    const baseHealth = state.selectedCharacter?.health || 100;
-    const opponentBaseHealth = state.opponent?.health || 100;
+    const baseHealth = roundHp(state.selectedCharacter?.health);
+    const opponentBaseHealth = roundHp(state.opponent?.health);
 
     // Update wins
     const playerWins = state.playerWins + (winner === 'player' ? 1 : 0);
@@ -583,6 +843,8 @@ export const useGameStore = create<GameStore>((set) => ({
       isAttacking: false,
       isOpponentAttacking: false,
       currentMove: null,
+      opponentMove: null,
+      opponentBlocking: false,
       moveDir: 0,
       playerVel: 0,
       isJumping: false
@@ -604,7 +866,8 @@ export const useGameStore = create<GameStore>((set) => ({
         playerFacing: 'right' as const,
         moveDir: 0,
         playerVel: 0,
-        specialMeter: 0
+        specialMeter: 0,
+        opponentSpecialMeter: 0
       };
 
       if (boutOver) {
@@ -623,7 +886,8 @@ export const useGameStore = create<GameStore>((set) => ({
           currentMove: null,
           moveDir: 0,
           playerVel: 0,
-          specialMeter: 0
+          specialMeter: 0,
+          opponentSpecialMeter: 0
         });
       } else {
         set({
@@ -643,8 +907,8 @@ export const useGameStore = create<GameStore>((set) => ({
   resetGame: () => {
     clearRoundLoops();
     set({
-      playerHealth: 100,
-      opponentHealth: 100,
+      playerHealth: ROUND_HP,
+      opponentHealth: ROUND_HP,
       gameStatus: 'ready',
       round: 1,
       roundLoser: null,
@@ -667,7 +931,9 @@ export const useGameStore = create<GameStore>((set) => ({
       playerFacing: 'right',
       moveDir: 0,
       playerVel: 0,
-      specialMeter: 0
+      specialMeter: 0,
+      opponentSpecialMeter: 0,
+      opponentBlocking: false
     });
   },
 

@@ -7,19 +7,31 @@ import { stages } from '../data/stages';
 import { useGameStore, GAUNTLET_SIZE } from '../store/gameStore';
 import { Swords, Sparkles, ArrowLeft, ChevronRight } from 'lucide-react';
 import { Character } from '../types/game';
+import { accentOf } from '../data/accents';
+import FighterPreview from '../three/FighterPreview';
+import { enterFullscreen } from '../lib/fullscreen';
+import { useSettings } from '../store/settingsStore';
 
-// Signature colour per fighter — drives glows, stat bars and the backdrop tint.
-const ACCENTS: Record<string, string> = {
-  ninja: '#818cf8', robot: '#22d3ee', alien: '#a78bfa', dragon: '#10b981',
-  poop: '#d97706', ghost: '#cbd5e1', zombie: '#84cc16', trex: '#22c55e',
-  octopus: '#f472b6', gorilla: '#9ca3af', devil: '#a855f7', ice: '#38bdf8',
-  chicken: '#facc15', unicorn: '#e879f9', clown: '#ef4444',
-};
-const accentOf = (id: string) => ACCENTS[id] ?? '#f59e0b';
 
 const overallOf = (c: Character) =>
   Math.round(((c.stats.power + c.stats.speed + c.stats.technique) / 3) * 10) / 10;
 const tierOf = (ovr: number) => (ovr >= 8.7 ? 'S' : ovr >= 8 ? 'A' : ovr >= 7.3 ? 'B' : 'C');
+
+// Fades the 3D preview out toward its edges (see the hero panel).
+const PREVIEW_MASK = 'radial-gradient(ellipse 50% 50% at 50% 50%, #000 62%, transparent 100%)';
+
+// Whether a CSS media query currently matches (updates live).
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = React.useState(() => window.matchMedia(query).matches);
+  React.useEffect(() => {
+    const mq = window.matchMedia(query);
+    const update = () => setMatches(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, [query]);
+  return matches;
+}
 
 // Measure an element and keep its size in state (updates on resize / rotate).
 function useElementSize<T extends HTMLElement>() {
@@ -39,8 +51,8 @@ function useElementSize<T extends HTMLElement>() {
 
 const StatBar = ({ label, value, accent }: { label: string; value: number; accent: string }) => (
   <div className="flex items-center gap-1.5">
-    <span className="w-8 text-[10px] sm:text-xs text-gray-300 text-left shrink-0">{label}</span>
-    <div className="flex-1 h-2 sm:h-2.5 bg-gray-700/70 rounded-full overflow-hidden">
+    <span className="w-8 lg:w-10 text-[10px] sm:text-xs lg:text-sm text-gray-300 text-left shrink-0">{label}</span>
+    <div className="flex-1 h-2 sm:h-2.5 lg:h-3 bg-gray-700/70 rounded-full overflow-hidden">
       <motion.div
         className="h-full rounded-full"
         style={{ background: `linear-gradient(90deg, ${accent}, ${accent}aa)` }}
@@ -49,7 +61,7 @@ const StatBar = ({ label, value, accent }: { label: string; value: number; accen
         transition={{ duration: 0.5, ease: 'easeOut' }}
       />
     </div>
-    <span className="w-3.5 text-right text-[10px] sm:text-xs text-gray-400 tabular-nums shrink-0">{value}</span>
+    <span className="w-3.5 lg:w-5 text-right text-[10px] sm:text-xs lg:text-sm text-gray-400 tabular-nums shrink-0">{value}</span>
   </div>
 );
 
@@ -68,9 +80,14 @@ export default function CharacterSelect() {
 
   // Roster: two rows that scroll together as one unit; tile size follows the
   // available height of the scroll area.
+  // The roster is a strip of tiles that scrolls sideways as one. Tablets /
+  // desktops (roomy landscape) get three rows of bigger tiles and a wider
+  // hero panel; phones keep two rows and a slim hero column.
+  const roomy = useMediaQuery('(min-width: 900px) and (min-height: 600px)');
   const [rosterRef, rosterSize] = useElementSize<HTMLDivElement>();
-  const GAP = 8;
-  const tile = Math.min(Math.max(0, (rosterSize.h - GAP) / 2), 118);
+  const GAP = roomy ? 10 : 8;
+  const rows = roomy ? 3 : 2;
+  const tile = Math.max(0, Math.min((rosterSize.h - GAP * (rows - 1)) / rows, roomy ? 168 : 118));
 
   // Track scroll position so the edge fades only show when there's more to see.
   const [edges, setEdges] = React.useState({ left: false, right: false });
@@ -83,15 +100,23 @@ export default function CharacterSelect() {
     });
   }, [rosterRef]);
   React.useEffect(updateEdges, [updateEdges, tile, rosterSize.w]);
+  const rosterMask = `linear-gradient(to right, ${edges.left ? 'transparent 0, #000 40px' : '#000 0'}, ${
+    edges.right ? '#000 calc(100% - 64px), transparent 100%' : '#000 100%'
+  })`;
 
   const handleSelect = (id: string) => {
     setSelectedId(id);
-    new Audio('/assets/select.wav').play().catch(() => {});
+    // Opened directly (or after swiping out of full screen): any tap here
+    // brings full screen back.
+    if (useSettings.getState().fullscreen) enterFullscreen();
+    if (useSettings.getState().sfx) new Audio('/assets/select.wav').play().catch(() => {});
   };
 
   const handleFight = () => {
     ReactGA.event({ category: 'Game', action: 'Fight Started', label: selected.name });
     startGauntlet(selected);
+    // Hide the browser bar for the fight (needs this tap to be allowed).
+    if (useSettings.getState().fullscreen) enterFullscreen();
     navigate('/arena');
   };
 
@@ -119,7 +144,7 @@ export default function CharacterSelect() {
         </span>
         <span
           className="w-full px-0.5 font-semibold leading-[1.05] text-center line-clamp-2"
-          style={{ marginTop: tile * 0.04, fontSize: Math.max(8, Math.min(Math.round(tile * 0.13), 13)), color: isSelected ? '#fff' : '#cbd5e1' }}
+          style={{ marginTop: tile * 0.04, fontSize: Math.max(8, Math.min(Math.round(tile * 0.12), roomy ? 15 : 13)), color: isSelected ? '#fff' : '#cbd5e1' }}
         >
           {character.name}
         </span>
@@ -172,12 +197,15 @@ export default function CharacterSelect() {
             ref={rosterRef}
             onScroll={updateEdges}
             className="h-full overflow-x-auto overflow-y-hidden no-scrollbar"
+            // Tiles fade out at an edge with more fighters beyond it. A mask
+            // (not a dark overlay) so the backdrop shows through seamlessly.
+            style={{ WebkitMaskImage: rosterMask, maskImage: rosterMask }}
           >
             {tile > 0 && (
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateRows: `repeat(2, ${tile}px)`,
+                  gridTemplateRows: `repeat(${rows}, ${tile}px)`,
                   gridAutoFlow: 'column',
                   gridAutoColumns: `${tile}px`,
                   gap: GAP,
@@ -193,14 +221,9 @@ export default function CharacterSelect() {
             )}
           </div>
 
-          {/* left fade — appears once you've scrolled */}
+          {/* chevron — "more fighters this way" */}
           <div
-            className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-black/80 to-transparent transition-opacity duration-200"
-            style={{ opacity: edges.left ? 1 : 0 }}
-          />
-          {/* right fade + chevron — "more fighters this way" */}
-          <div
-            className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-black/85 to-transparent flex items-center justify-end pr-1 transition-opacity duration-200"
+            className="pointer-events-none absolute inset-y-0 right-0 w-12 flex items-center justify-end pr-1 transition-opacity duration-200"
             style={{ opacity: edges.right ? 1 : 0 }}
           >
             <motion.div animate={{ x: [0, 4, 0] }} transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}>
@@ -209,28 +232,26 @@ export default function CharacterSelect() {
           </div>
         </div>
 
-        {/* Hero */}
-        <motion.div
-          key={selected.id}
-          initial={{ opacity: 0, x: 12 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.2 }}
-          className="w-[32%] max-w-[16rem] shrink-0 flex flex-col min-h-0"
-        >
-          <div className="flex-1 min-h-0 flex items-center justify-center overflow-hidden">
-            <motion.span
-              className="leading-none text-5xl sm:text-7xl lg:text-8xl"
-              style={{ filter: `drop-shadow(0 6px 18px ${accent}aa)` }}
-              animate={{ y: [0, -6, 0] }}
-              transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-            >
-              {selected.emoji}
-            </motion.span>
+        {/* Hero — the 3D preview stays mounted (one WebGL context) and swaps
+            fighters in place; only the text block re-animates per pick. */}
+        <div className={`${roomy ? 'w-[40%] max-w-[30rem] pl-2' : 'w-[32%] max-w-[16rem]'} shrink-0 flex flex-col min-h-0`}>
+          <div className="relative flex-1 min-h-0 -mx-2">
+            {/* Soft-edged: the preview (its glow and pedestal) fades out toward
+                every edge, so it blends into the backdrop with no visible box. */}
+            <div className="absolute inset-0" style={{ WebkitMaskImage: PREVIEW_MASK, maskImage: PREVIEW_MASK }}>
+              <FighterPreview character={selected} />
+            </div>
           </div>
 
-          <div className="shrink-0">
+          <motion.div
+            key={selected.id}
+            initial={{ opacity: 0, x: 12 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.2 }}
+            className="shrink-0"
+          >
             <div className="flex items-start gap-1.5">
-              <h3 className="flex-1 min-w-0 font-bold text-lg sm:text-xl leading-[1.05] break-words line-clamp-2" style={{ textShadow: `0 0 14px ${accent}88` }}>
+              <h3 className={`flex-1 min-w-0 font-bold ${roomy ? 'text-3xl' : 'text-lg sm:text-xl'} leading-[1.05] break-words line-clamp-2`} style={{ textShadow: `0 0 14px ${accent}88` }}>
                 {selected.name}
               </h3>
               <span
@@ -241,30 +262,31 @@ export default function CharacterSelect() {
                 {tier}
               </span>
             </div>
-            <div className="flex items-center gap-1 text-[10px] sm:text-xs mt-0.5" style={{ color: accent }}>
-              <Sparkles size={11} className="shrink-0" />
+            <div className={`flex items-center gap-1 ${roomy ? 'text-sm mt-1.5' : 'text-[10px] sm:text-xs mt-0.5'}`} style={{ color: accent }}>
+              <Sparkles size={roomy ? 15 : 11} className="shrink-0" />
               <span className="truncate">{selected.specialName}</span>
             </div>
 
-            <div className="mt-2 space-y-1.5">
+            <div className={roomy ? 'mt-4 space-y-2.5' : 'mt-2 space-y-1.5'}>
               <StatBar label="POW" value={selected.stats.power} accent={accent} />
               <StatBar label="SPD" value={selected.stats.speed} accent={accent} />
               <StatBar label="TEC" value={selected.stats.technique} accent={accent} />
             </div>
-          </div>
+          </motion.div>
 
           <motion.button
             onClick={handleFight}
             whileTap={{ scale: 0.96 }}
             animate={{ boxShadow: ['0 0 0px rgba(239,68,68,0)', '0 0 22px rgba(239,68,68,0.55)', '0 0 0px rgba(239,68,68,0)'] }}
             transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
-            className="shrink-0 mt-2 w-full py-2.5 sm:py-3 bg-gradient-to-r from-red-600 to-orange-500 rounded-lg
-                     font-bold text-sm sm:text-lg flex items-center justify-center gap-2"
+            className={`shrink-0 w-full bg-gradient-to-r from-red-600 to-orange-500 rounded-lg font-bold flex items-center justify-center gap-2 ${
+              roomy ? 'mt-4 py-4 text-xl' : 'mt-2 py-2.5 sm:py-3 text-sm sm:text-lg'
+            }`}
           >
             <Swords size={18} />
             FIGHT
           </motion.button>
-        </motion.div>
+        </div>
       </div>
     </div>
   );

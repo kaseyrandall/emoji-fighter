@@ -3,10 +3,26 @@
 @tailwind utilities;
 
 @layer base {
+  /* The game is a single full-screen view: lock the page itself so it can
+     never scroll or rubber-band (iPad Safari / Chrome would bounce the whole
+     page when a drag reached it, or when anything overhung the screen edge).
+     Areas meant to scroll (the fighter roster, credits) scroll inside their
+     own containers. */
   html,
   body,
   #root {
     height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+  body {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+  }
+  /* Drags on a 3D scene belong to the game, never to page panning / zoom. */
+  canvas {
+    touch-action: none;
   }
   body {
     @apply antialiased font-arcade;
@@ -40,11 +56,26 @@
   .game-button {
     @apply select-none touch-none;
   }
+  /* Sits low in the corners, where thumbs rest when holding a phone in
+     landscape. */
   .game-controls {
-    @apply fixed bottom-0 left-0 right-0 p-4 flex justify-between items-center;
-    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
-    padding-left: calc(1rem + env(safe-area-inset-left));
-    padding-right: calc(1rem + env(safe-area-inset-right));
+    @apply fixed bottom-0 left-0 right-0 flex justify-between items-center;
+    padding-bottom: calc(0.375rem + env(safe-area-inset-bottom));
+    /* The same gap on both sides. Phones report the camera cutout as a safe
+       area on one side only (the Pixel's is mid-left in landscape, well above
+       the joystick), which pushed the joystick in and left the buttons hard
+       against the other edge. Half the larger inset clears rounded corners
+       without the lopsided look. */
+    --controls-side: calc(1.5rem + max(env(safe-area-inset-left), env(safe-area-inset-right)) * 0.5);
+    padding-left: var(--controls-side);
+    padding-right: var(--controls-side);
+  }
+  /* An invisible halo that extends a button's touch target past its edge. */
+  .touch-pad::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border-radius: 9999px;
   }
   /* Show the touch controls on every touch device (phones AND large iPads),
      and hide them only on true mouse/desktop pointers, which play by keyboard.
