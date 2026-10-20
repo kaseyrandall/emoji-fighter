@@ -92,7 +92,9 @@ function ArenaHudBase({
   const opponentReady = opponentSpecialMeter >= 100;
 
   return (
-    <div className="hud-text relative w-full max-w-5xl mx-auto flex items-start gap-1.5 sm:gap-3 px-2 sm:px-3 pt-2 z-10">
+    <div className="hud-text relative w-full max-w-5xl mx-auto flex items-start gap-1.5 sm:gap-3 pt-2 z-10"
+      style={{ paddingLeft: 'max(0.75rem, env(safe-area-inset-left))', paddingRight: 'max(0.75rem, env(safe-area-inset-right))' }}
+    >
       {/* Player portrait */}
       <div
         className="shrink-0 w-11 h-11 sm:w-14 sm:h-14 rounded-lg flex items-center justify-center text-2xl sm:text-4xl bg-gray-900/60 backdrop-blur-sm transition-colors"

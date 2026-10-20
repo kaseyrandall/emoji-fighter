@@ -1,10 +1,11 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Info, LogOut, Maximize, Music, Play, Swords, Volume2 } from 'lucide-react';
+import { Info, LogOut, Maximize, Music, Play, Swords, Vibrate, Volume2 } from 'lucide-react';
 import { Character } from '../types/game';
 import { useSettings } from '../store/settingsStore';
 import KeyHints from './KeyHints';
 import { enterFullscreen, exitFullscreen, fullscreenSupported, isFullscreen, onFullscreenChange } from '../lib/fullscreen';
+import { isNative } from '../lib/native';
 
 // A settings tile: icon over a label, lit up when on, with a status dot in
 // the corner. Big enough to hit with a thumb; the state reads at a glance.
@@ -41,7 +42,7 @@ interface PauseMenuProps {
 // beside it the settings as tap tiles (remembered on the device) over
 // Quit / Credits.
 export default function PauseMenu({ player, opponent, fight, totalFights, round, onResume, onQuit, onCredits }: PauseMenuProps) {
-  const { music, sfx, setMusic, setSfx, setFullscreen } = useSettings();
+  const { music, sfx, haptics, setMusic, setSfx, setFullscreen, setHaptics } = useSettings();
   // Fullscreen shows the real state: the player can also leave it with the
   // system back / swipe gesture or Esc.
   const [full, setFull] = React.useState(isFullscreen);
@@ -101,9 +102,13 @@ export default function PauseMenu({ player, opponent, fight, totalFights, round,
         </button>
 
         <div className="flex-1 min-w-0 flex flex-col gap-3">
-          <div style={{ height: 'var(--tile)' }} className={`grid gap-3 ${canFullscreen ? 'grid-cols-3' : 'grid-cols-2'}`}>
+          <div style={{ height: 'var(--tile)' }} className={`grid gap-3 ${canFullscreen || isNative ? 'grid-cols-3' : 'grid-cols-2'}`}>
             <SettingTile label="Music" icon={<Music className="w-[18px] h-[18px] lg:w-6 lg:h-6" />} on={music} onChange={setMusic} />
             <SettingTile label="Sound" icon={<Volume2 className="w-[18px] h-[18px] lg:w-6 lg:h-6" />} on={sfx} onChange={setSfx} />
+            {/* The apps are always full screen; there the third tile is vibration. */}
+            {isNative && (
+              <SettingTile label="Vibration" icon={<Vibrate className="w-[18px] h-[18px] lg:w-6 lg:h-6" />} on={haptics} onChange={setHaptics} />
+            )}
             {canFullscreen && (
               <SettingTile
                 label="Full screen"

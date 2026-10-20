@@ -6,9 +6,11 @@ interface Settings {
   music: boolean;
   sfx: boolean;
   fullscreen: boolean; // go fullscreen (hide the browser bar) while fighting
+  haptics: boolean; // vibrate on hits (app store builds)
   setMusic: (on: boolean) => void;
   setSfx: (on: boolean) => void;
   setFullscreen: (on: boolean) => void;
+  setHaptics: (on: boolean) => void;
 }
 
 // localStorage can be missing or throw (private browsing, blocked site data);
@@ -31,14 +33,16 @@ export const useSettings = create<Settings>()(
       music: true,
       sfx: true,
       fullscreen: true,
+      haptics: true,
       setMusic: (music) => set({ music }),
       setSfx: (sfx) => set({ sfx }),
       setFullscreen: (fullscreen) => set({ fullscreen }),
+      setHaptics: (haptics) => set({ haptics }),
     }),
     {
       name: 'emoji-fighter-settings',
       storage: createJSONStorage(() => safeStorage),
-      partialize: (s) => ({ music: s.music, sfx: s.sfx, fullscreen: s.fullscreen }),
+      partialize: (s) => ({ music: s.music, sfx: s.sfx, fullscreen: s.fullscreen, haptics: s.haptics }),
     }
   )
 );

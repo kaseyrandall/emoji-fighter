@@ -2,6 +2,8 @@
 // Supported by Android browsers, desktop browsers and iPad Safari; iPhone
 // Safari has no page fullscreen (there, "Add to Home Screen" launches the game
 // without the browser bar instead). Requests must come from a tap or click.
+// The app store builds are always full screen, so it's off there.
+import { isNative } from './native';
 
 type FsDocument = Document & {
   webkitFullscreenElement?: Element | null;
@@ -20,7 +22,7 @@ const standalone = () =>
     (navigator as Navigator & { standalone?: boolean }).standalone === true);
 
 export const fullscreenSupported = () =>
-  typeof document !== 'undefined' && !standalone() && !!(doc().fullscreenEnabled || doc().webkitFullscreenEnabled);
+  typeof document !== 'undefined' && !isNative && !standalone() && !!(doc().fullscreenEnabled || doc().webkitFullscreenEnabled);
 
 export const isFullscreen = () => !!(doc().fullscreenElement || doc().webkitFullscreenElement);
 

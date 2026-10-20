@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import ReactGA from 'react-ga4';
+import ReactGA from '../lib/analytics';
 import { motion } from 'framer-motion';
 import { characters } from '../data/characters';
 import { stages } from '../data/stages';
@@ -153,7 +153,7 @@ export default function CharacterSelect() {
   };
 
   return (
-    <div className="relative h-[100dvh] flex flex-col overflow-hidden">
+    <div className="safe-x relative h-[100dvh] flex flex-col overflow-hidden">
       {/* Atmospheric stage backdrop */}
       <div
         className="absolute inset-0 -z-20 bg-cover bg-center scale-105"

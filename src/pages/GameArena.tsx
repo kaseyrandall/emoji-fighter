@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import ReactGA from 'react-ga4';
+import ReactGA from '../lib/analytics';
 import { motion, AnimatePresence } from 'framer-motion';
 import UIFx from 'uifx';
 import { useShallow } from 'zustand/react/shallow';

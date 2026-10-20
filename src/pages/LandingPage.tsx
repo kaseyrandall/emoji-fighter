@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import ReactGA from 'react-ga4';
+import ReactGA from '../lib/analytics';
+import { isNative } from '../lib/native';
 import { AnimatePresence } from 'framer-motion';
 import { Swords, Info, History } from 'lucide-react';
 import Credits from '../components/Credits';
@@ -64,16 +65,19 @@ export default function LandingPage() {
           >
             Play Now
           </button>
-          <div className="grid grid-cols-2 gap-3">
-            {/* The original 2D game, kept playable as a static build at /classic/ */}
-            <a
-              href="/classic/"
-              onClick={() => ReactGA.event({ category: 'Game', action: 'Open Classic', label: 'Landing Page' })}
-              className={SECONDARY_BUTTON}
-            >
-              <History size={16} className="shrink-0" />
-              Classic
-            </a>
+          <div className={`grid gap-3 ${isNative ? 'grid-cols-1' : 'grid-cols-2'}`}>
+            {/* The original 2D game, kept playable as a static build at /classic/
+                (website only: the app store builds ship just the 3D game) */}
+            {!isNative && (
+              <a
+                href="/classic/"
+                onClick={() => ReactGA.event({ category: 'Game', action: 'Open Classic', label: 'Landing Page' })}
+                className={SECONDARY_BUTTON}
+              >
+                <History size={16} className="shrink-0" />
+                Classic
+              </a>
+            )}
             <button onClick={() => setShowCredits(true)} className={SECONDARY_BUTTON}>
               <Info size={16} className="shrink-0" />
               Credits

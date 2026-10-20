@@ -24,3 +24,7 @@ npm run dev
 ## Classic (2D) version
 
 The original 2D game stays playable at `/classic/` (linked from the home page). It's a prebuilt static copy in `public/classic/`, built from `main` at commit `95382f3` (the last 2D release) with `base: '/classic/'`, plus a "Play the new 3D version" button on its home page. It ships its own copies of the sounds the 3D game dropped (`public/classic/assets/*.wav`) and loads the stage art, fight music (`fight-bgm.wav`, now only used by the classic game) and select sound from the shared `public/assets/`, so keep those files in place.
+
+## iOS and Android apps
+
+The game also ships as native iOS and Android apps, wrapped with Capacitor (`ios/`, `android/`). Run `npm run cap:sync` after any game change. Build steps, signing and the store submission checklist are in [docs/app-stores.md](docs/app-stores.md); the listing copy is in [docs/store-listing.md](docs/store-listing.md).

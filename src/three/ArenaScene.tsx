@@ -12,6 +12,7 @@ import { Stage3D } from './Stage3D';
 import { Vfx, VfxApi } from './Vfx';
 import { specialStyleOf } from './specialStyles';
 import * as sfx from '../audio/sfx';
+import { buzz } from '../lib/native';
 
 // The game store still simulates the fight on its original 2D coordinates:
 // positions are a fighter's left edge as a % of the arena, jumps are px of
@@ -213,6 +214,7 @@ function EventFx({ fx, vfx }: { fx: React.MutableRefObject<FxState>; vfx: React.
         f.shakeMag = 0.5;
         // The loser's fall (slowed by the KO slow-mo) hits the floor ~1s in.
         f.koDust = 1.0;
+        buzz('ko');
       }
       if (s.gameStatus === 'intro' || s.gameStatus === 'ready') api.clear();
       last.current.status = s.gameStatus;
@@ -263,6 +265,8 @@ function EventFx({ fx, vfx }: { fx: React.MutableRefObject<FxState>; vfx: React.
       if (h.result !== 'dodged') {
         if (h.move === 'heavy') sfx.heavyImpact(h.result === 'blocked');
         if (h.move === 'punch') sfx.punchImpact(h.result === 'blocked');
+        // App store builds: feel every blow that connects.
+        buzz(h.result === 'blocked' || h.move === 'punch' ? 'light' : h.move === 'heavy' ? 'medium' : 'heavy');
       }
       if (h.result === 'dodged') {
         // Whiffed under / over a jump: just call it out on the dodger.
