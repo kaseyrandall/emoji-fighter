@@ -472,18 +472,18 @@ export default function GameArena() {
       {(gameStatus === 'ready' || gameStatus === 'playing') && (
         <div className="game-controls items-end">
           {/* Movement joystick */}
-          <Joystick onMoveDir={setMoveDir} onJump={() => performMove('jump')} size={136} hitPad={28} />
+          <Joystick onMoveDir={setMoveDir} onJump={() => performMove('jump')} size={156} hitPad={28} />
 
           {/* Attack cluster — special as a clearly-visible apex above the
               punch / heavy-punch primary pair (a triangle, no button hidden behind
               another). Buttons fire on touch-down (not release) for snappy
               inputs, and .touch-pad gives each a larger invisible hit area. */}
-          <div className="relative w-[13rem] h-[10.75rem] shrink-0 select-none">
+          <div className="relative w-[14.75rem] h-[12rem] shrink-0 select-none">
             {/* Special apex — always visible; the ring fills as the super meter
                 charges and the whole button glows once it's ready. */}
             <motion.button
               onPointerDown={fireSpecial}
-              className="game-button touch-pad absolute top-0 left-1/2 -translate-x-1/2 w-[4.5rem] h-[4.5rem] rounded-full flex items-center justify-center text-3xl focus:outline-none active:brightness-110"
+              className="game-button touch-pad absolute top-0 left-1/2 -translate-x-1/2 w-[5rem] h-[5rem] rounded-full flex items-center justify-center text-3xl focus:outline-none active:brightness-110"
               style={{
                 background: 'radial-gradient(circle at 50% 35%, #a855f7, #6b21a8)',
                 opacity: specialReady ? 1 : 0.7,
@@ -507,13 +507,13 @@ export default function GameArena() {
             {/* Punch (primary) */}
             <button
               onPointerDown={() => { performMove('punch'); playMoveSound('punch'); }}
-              className="game-button touch-pad absolute bottom-0 left-0 w-[5.5rem] h-[5.5rem] rounded-full flex items-center justify-center text-4xl bg-red-500/55 border-2 border-red-300/70 focus:outline-none active:bg-red-600/70"
+              className="game-button touch-pad absolute bottom-0 left-0 w-[6.25rem] h-[6.25rem] rounded-full flex items-center justify-center text-4xl bg-red-500/55 border-2 border-red-300/70 focus:outline-none active:bg-red-600/70"
               aria-label="Punch"
             >👊</button>
             {/* Heavy punch (primary) */}
             <button
               onPointerDown={() => { performMove('heavy'); playMoveSound('heavy'); }}
-              className="game-button touch-pad absolute bottom-0 right-0 w-[5.5rem] h-[5.5rem] rounded-full flex items-center justify-center text-4xl bg-blue-500/55 border-2 border-blue-300/70 focus:outline-none active:bg-blue-600/70"
+              className="game-button touch-pad absolute bottom-0 right-0 w-[6.25rem] h-[6.25rem] rounded-full flex items-center justify-center text-4xl bg-blue-500/55 border-2 border-blue-300/70 focus:outline-none active:bg-blue-600/70"
               aria-label="Heavy punch"
             >💥</button>
           </div>
