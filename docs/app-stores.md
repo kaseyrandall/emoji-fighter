@@ -9,7 +9,7 @@ The same web game ships inside native iOS and Android shells built with [Capacit
 | `capacitor.config.ts` | App ID `com.edgekase.emojifighter`, home-screen name "Emoji Fighter", splash and inset settings |
 | `ios/` | Xcode project (Swift Package Manager, no CocoaPods) |
 | `android/` | Android Studio / Gradle project (target SDK 36, min SDK 24) |
-| `assets/` | Icon and splash source art. Rerun `npx capacitor-assets generate --ios --android --iconBackgroundColor '#07070d' --splashBackgroundColor '#07070d'` after changing them |
+| `assets/` | Icon and splash source art. Rerun `npx capacitor-assets generate --ios --android --iconBackgroundColor '#07070d' --splashBackgroundColor '#1e1139'` after changing them |
 | `src/lib/native.ts` | Landscape lock, Android back button, haptics. Every call does nothing on the web |
 | `src/lib/analytics.ts` | Google Analytics, website only. The apps collect nothing |
 | `public/privacy.html` | Privacy policy, live at `/privacy.html` after the next Netlify deploy |
